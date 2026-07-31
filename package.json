@@ -1,0 +1,13 @@
+{
+  "name": "@wisent-ai/weles-client",
+  "description": "Safe client and receipt verifier for authorized Weles workflows",
+  "type": "module",
+  "exports": "./src/index.mjs",
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "license": "SEE LICENSE IN LICENSE"
+}
