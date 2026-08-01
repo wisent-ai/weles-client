@@ -1,5 +1,13 @@
 # Weles Client
 
+<!-- wisent-readme-signals:start -->
+[![Release](https://img.shields.io/github/v/release/wisent-ai/weles-client?display_name=tag&sort=semver)](https://github.com/wisent-ai/weles-client/releases)
+[![Downloads](https://img.shields.io/github/downloads/wisent-ai/weles-client/total)](https://github.com/wisent-ai/weles-client/releases)
+[![License](https://img.shields.io/github/license/wisent-ai/weles-client)](https://github.com/wisent-ai/weles-client)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Wisent-5865F2?logo=discord&logoColor=white)](https://discord.gg/qRjpkthq54)
+<!-- wisent-readme-signals:end -->
+
+
 Safe public client and receipt verifier for separately authorized Weles browser workflows.
 
 This repository is intentionally not the Weles executor. Fingerprint spoofing, browser patches, provider rotation, anti-bot research, service-specific trajectories, worker scheduling, operational recordings, and stealth configuration remain private in the Weles service repositories.
