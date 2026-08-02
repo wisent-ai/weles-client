@@ -1,11 +1,5 @@
 # Weles Client
 
-<!-- wisent-readme-signals:start -->
-[![Release](https://img.shields.io/github/v/release/wisent-ai/weles-client?display_name=tag&sort=semver)](https://github.com/wisent-ai/weles-client/releases)
-[![Downloads](https://img.shields.io/github/downloads/wisent-ai/weles-client/total)](https://github.com/wisent-ai/weles-client/releases)
-[![License](https://img.shields.io/github/license/wisent-ai/weles-client)](https://github.com/wisent-ai/weles-client)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Wisent-5865F2?logo=discord&logoColor=white)](https://discord.gg/qRjpkthq54)
-<!-- wisent-readme-signals:end -->
 
 
 Safe public client and receipt verifier for separately authorized Weles browser workflows.
@@ -77,7 +71,12 @@ Signed receipt claims bind task, organization, origin, action, outcome, and evid
 
 ## Release status
 
-Public development source. The package manifest intentionally has no publishable version until an immutable release is approved. Source availability does not promise a hosted Weles service, target authorization, workflow approval, or SLA.
+Version `0.1.0` is declared for the first independent package release. Tagged
+`vX.Y.Z` revisions are packaged by this repository into a GitHub Release
+tarball and checksum; no Weles executor or private operational asset is
+included. Until such a SemVer release is published, this remains public
+development source. Source or package availability does not promise a hosted
+Weles service, target authorization, workflow approval, or SLA.
 
 - Issues: [`wisent-ai/weles-client`](https://github.com/wisent-ai/weles-client/issues)
 - Vulnerabilities: [private GitHub Security Advisory](https://github.com/wisent-ai/weles-client/security/advisories/new)

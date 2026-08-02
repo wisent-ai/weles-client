@@ -1,5 +1,6 @@
 {
   "name": "@wisent-ai/weles-client",
+  "version": "0.1.0",
   "description": "Safe client and receipt verifier for authorized Weles workflows",
   "type": "module",
   "exports": "./src/index.mjs",
