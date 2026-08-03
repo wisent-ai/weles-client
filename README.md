@@ -1,83 +1,306 @@
 # Weles Client
 
+<!-- wisent-readme-signals:start -->
+[![Release](https://img.shields.io/github/v/release/wisent-ai/weles-client?display_name=tag&sort=semver)](https://github.com/wisent-ai/weles-client/releases)
+[![Downloads](https://img.shields.io/github/downloads/wisent-ai/weles-client/total)](https://github.com/wisent-ai/weles-client/releases)
+[![License](https://img.shields.io/github/license/wisent-ai/weles-client)](https://github.com/wisent-ai/weles-client)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Wisent-5865F2?logo=discord&logoColor=white)](https://discord.gg/qRjpkthq54)
+<!-- wisent-readme-signals:end -->
 
+**Weles Client is a small public Node.js client and signed-receipt verifier for
+submitting separately authorized browser workflows through exact origin, action,
+credential-reference, justification, and idempotency boundaries.**
 
-Safe public client and receipt verifier for separately authorized Weles browser workflows.
+It is intentionally not the Weles browser executor. The package helps a caller
+form and verify the safe public contract; it does not grant target authorization,
+approve a workflow, run a browser, or prove that an external site permits
+automation.
 
-This repository is intentionally not the Weles executor. Fingerprint spoofing, browser patches, provider rotation, anti-bot research, service-specific trajectories, worker scheduling, operational recordings, and stealth configuration remain private in the Weles service repositories.
+[Quick start](#quick-start) · [Client API](#primary-interfaces) ·
+[Receipt verification](#receipt-verification) ·
+[Canonical repository](https://github.com/wisent-ai/weles-client)
 
-## Guarantees
+Current release status: public development source. The manifest has no version or
+publish script until an immutable package release is approved. Source
+availability does not promise a hosted Weles endpoint, approved trajectory,
+target support, evidence retention, or SLA.
 
-The client:
+## Problem and intended users
 
-- requires an exact origin allowlist and action allowlist;
-- accepts HTTPS endpoints, with HTTP allowed only on `localhost` for development;
-- rejects plaintext password, secret, token, cookie, authorization, and proxy-auth fields;
-- sends opaque credential references separately from workflow input;
-- requires a human-readable justification for every submission and cancellation;
-- sends caller-controlled idempotency keys and performs no hidden retries;
-- supports cancellation through an explicit idempotent request;
-- redacts sensitive response fields from surfaced errors;
-- verifies signed receipts with caller-supplied trusted public keys;
-- rejects a receipt when displayed claims differ from its signed payload.
+A browser executor can cross high-risk trust boundaries: authenticated accounts,
+personal data, terms-controlled sites, mutable pages, irreversible submissions,
+and credentials. A caller needs an inspectable contract that refuses broad
+origins/actions and plaintext secret-shaped fields, preserves idempotency, and
+checks that displayed receipt claims match a trusted signature.
 
-The client does not prove that a target permits automation. The organization remains responsible for authorization, acceptable use, applicable terms, origin/action approval, and data handling.
+Weles Client serves:
 
-## Usage
+- **application developers** submitting one organization-approved Weles action;
+- **platform operators** maintaining exact origin/action allowlists, scoped
+  service bearers, opaque credential references, and trusted receipt keys;
+- **auditors and downstream systems** verifying the signed outcome and evidence
+  digest before relying on a service response;
+- **self-hosted or local developers** exercising the same client contract against
+  an explicitly controlled localhost service.
+
+## Product boundaries
+
+### Included
+
+- HTTPS endpoints, with plaintext HTTP allowed only for hostname `localhost`;
+- non-empty exact origin and action allowlists;
+- rejection of request input keys matching password, secret, token, cookie,
+  authorization, or proxy-auth patterns;
+- separate opaque `credentialRefs`;
+- required human-readable submission justification and cancellation reason;
+- caller-controlled or randomly generated idempotency keys;
+- explicit submit and cancel operations with no hidden retry;
+- response-error redaction by sensitive key name;
+- signature verification against a caller-owned key ID map;
+- equality checks between displayed receipt fields and signed claims;
+- stable `WelesClientError` codes and no library-owned logging.
+
+### Explicit non-goals and limitations
+
+- The client does not establish permission, ownership, acceptable use, legal
+  basis, terms compliance, or provider approval for an origin or action.
+- An allowlist is caller configuration, not proof that the Weles service has a
+  reviewed trajectory or that the organization may run it.
+- Sensitive-field rejection is based on **key names**, not semantic inspection of
+  arbitrary string values. Callers must keep all credential material out of
+  `input` even when a key has an innocuous name.
+- `credentialRefs` are identifiers, not credentials. Their resolution and scope
+  belong to the executor's secret boundary.
+- Receipt verification proves that one trusted key signed the exact payload and
+  displayed claims match it. It does not check key revocation, certificate
+  chains, receipt freshness, evidence availability, target-side truth, or legal
+  sufficiency.
+- The current API exposes submit and cancel only; task polling, evidence download,
+  key discovery, authentication enrollment, and policy administration are not
+  included.
+- Fingerprint behavior, browser patches, provider rotation, anti-bot research,
+  service trajectories, scheduling, recordings, and stealth configuration remain
+  private executor implementation and are not promised by this package.
+
+### Supported environment and current capability
+
+| Surface | Requirement | Current state |
+|---|---|---|
+| Client import | Node.js ESM with global Fetch and `node:crypto` | Implemented source export |
+| Submit/cancel | authorized compatible Weles endpoint | Implemented |
+| Receipt verification | trusted public key keyed by receipt `keyId` | Implemented |
+| Automatic retry | — | Intentionally absent |
+| Task status/evidence retrieval | service API | Not exposed |
+| Executor/browser | private operated service | Not in this repository |
+| Hosted service/SLA | approved Weles subscription | Not promised by source |
+
+## Core use cases
+
+### Submit one approved workflow
+
+- **Actor:** an application service with a scoped Weles bearer.
+- **Initial state:** exact HTTPS endpoint, organization, origin, action, trusted
+  receipt keys, non-secret input, credential references, and justification are
+  explicit.
+- **Outcome:** the client sends `weles.task.current` with an idempotency key and
+  verifies any receipt returned in the response.
+- **Boundary:** acceptance is not completion; the action still depends on
+  executor policy, target state, authorization, and human approval where needed.
+
+### Cancel an outstanding task
+
+- **Actor:** the same authorized caller.
+- **Initial state:** task ID, cancellation reason, and idempotency key are known.
+- **Outcome:** the client submits one explicit cancellation request and verifies
+  any returned receipt.
+- **Boundary:** a cancellation request does not prove the executor stopped before
+  an external side effect. Inspect the signed outcome and service evidence.
+
+### Verify a retained receipt offline
+
+- **Actor:** an auditor or downstream service.
+- **Initial state:** receipt bytes and a trusted caller-controlled public-key map
+  are available.
+- **Outcome:** `verifyReceipt` rejects unsupported schema, unknown key, invalid
+  signature, non-JSON payload, or a mismatch in task, organization, origin,
+  action, outcome, or evidence digest.
+- **Boundary:** the caller owns trusted-key distribution, rotation, revocation,
+  retention, and the decision to rely on the claims.
+
+## How Weles Client works
+
+```text
+application policy
+  ├─ exact organization
+  ├─ origin/action allowlists
+  ├─ non-secret input + opaque credential refs
+  ├─ justification
+  └─ idempotency key
+              │ HTTPS + bearer
+              ▼
+      separately operated Weles service
+              │ response + optional signed receipt
+              ▼
+ trusted key map -> signature + displayed-claim verification -> caller decision
+```
+
+The caller owns authorization, allowlists, bearer custody, idempotency retention,
+trusted keys, and reliance decisions. The Weles service owns trajectory approval,
+execution, evidence generation, and service-side policy. The target site remains
+a separate authority over its account, data, terms, and resulting side effects.
+
+## Quick start
+
+This safe path loads the public module and demonstrates a local validation
+failure before any network request. It runs no browser and needs no Weles
+credential.
+
+### Prerequisites
+
+- Git;
+- a current Node.js release with ESM, global Fetch, and `node:crypto`.
+
+```bash
+git clone https://github.com/wisent-ai/weles-client.git
+cd weles-client
+node --input-type=module -e '
+  import { assertNoSensitiveFields } from "./src/index.mjs";
+  assertNoSensitiveFields({ report: "monthly" });
+  console.log("non-secret input accepted");
+'
+```
+
+Expected result: the process prints `non-secret input accepted` and makes no
+network request. To integrate a real endpoint, obtain an organization-approved
+origin/action contract, scoped bearer, and out-of-band trusted receipt key first.
+
+## Primary interfaces
 
 ```js
-import { WelesClient, verifyReceipt } from '@wisent-ai/weles-client';
+import {
+  WelesClient,
+  WelesClientError,
+  assertNoSensitiveFields,
+  redact,
+  verifyReceipt,
+} from "@wisent-ai/weles-client";
+```
 
+### Construct a client
+
+```js
 const client = new WelesClient({
   endpoint: process.env.WELES_URL,
   bearer: process.env.WELES_TOKEN,
   organizationId: process.env.WISENT_ORGANIZATION_ID,
-  allowedOrigins: ['https://console.example.com'],
-  allowedActions: ['export-approved-report'],
+  allowedOrigins: ["https://console.example.com"],
+  allowedActions: ["export-approved-report"],
   receiptKeys: {
-    'current-signing-key': process.env.WELES_RECEIPT_PUBLIC_KEY,
+    "current-signing-key": process.env.WELES_RECEIPT_PUBLIC_KEY,
   },
 });
-
-const accepted = await client.submit({
-  origin: 'https://console.example.com',
-  action: 'export-approved-report',
-  input: { report: 'monthly' },
-  credentialRefs: ['customer-console-account'],
-  justification: 'Export the report authorized by the account owner.',
-});
-
-if (accepted.receipt) {
-  verifyReceipt(accepted.receipt, client.receiptKeys);
-}
 ```
 
-A client call either returns the service response, including a verified receipt when one is present, or throws `WelesClientError` with a stable error code. The library never logs on its own.
+Do not put the bearer or private signing key in frontend code. Trusted receipt
+keys are public verification material and still require authenticated
+distribution and rotation.
 
-## Contract
+### Submit
 
-Task submissions carry:
+```js
+const accepted = await client.submit({
+  origin: "https://console.example.com",
+  action: "export-approved-report",
+  input: { report: "monthly" },
+  credentialRefs: ["customer-console-account"],
+  evidencePolicy: "receipt",
+  justification: "Export authorized by the account owner.",
+}, {
+  idempotencyKey: "caller-retained-operation-id",
+  signal: abortController.signal,
+});
+```
 
-- `organizationId`
-- exact `origin`
-- allowlisted `action`
-- non-secret `input`
-- opaque `credentialRefs`
-- `evidencePolicy`
-- human-readable `justification`
-- caller-controlled `Idempotency-Key`
+The client sends:
 
-Signed receipt claims bind task, organization, origin, action, outcome, and evidence digest. Consumers choose and rotate the trusted key set; an unknown key fails closed.
+- schema `weles.task.current`;
+- `organizationId`, normalized origin, exact action, and non-secret input;
+- opaque `credentialRefs` and evidence policy;
+- justification;
+- `Idempotency-Key` and bearer headers.
 
-## Release status
+If no key is supplied, the client generates a UUID. Persist your own operation ID
+when reconciliation across process restarts matters.
 
-Version `0.1.0` is declared for the first independent package release. Tagged
-`vX.Y.Z` revisions are packaged by this repository into a GitHub Release
-tarball and checksum; no Weles executor or private operational asset is
-included. Until such a SemVer release is published, this remains public
-development source. Source or package availability does not promise a hosted
-Weles service, target authorization, workflow approval, or SLA.
+### Cancel
 
-- Issues: [`wisent-ai/weles-client`](https://github.com/wisent-ai/weles-client/issues)
-- Vulnerabilities: [private GitHub Security Advisory](https://github.com/wisent-ai/weles-client/security/advisories/new)
-- License: Apache License 2.0; see [`LICENSE`](LICENSE)
+```js
+const cancelled = await client.cancel(taskId, {
+  reason: "The account owner withdrew approval.",
+  idempotencyKey: "caller-retained-cancellation-id",
+  signal: abortController.signal,
+});
+```
+
+Transport ambiguity is returned as `transport-failed`; the library does not
+retry. Reconcile with the service using an approved task-status channel before
+submitting a new operation.
+
+## Receipt verification
+
+```js
+const claims = verifyReceipt(receipt, {
+  "current-signing-key": process.env.WELES_RECEIPT_PUBLIC_KEY,
+});
+```
+
+The supported receipt schema is `weles.receipt.current`. Verification binds:
+
+- `taskId`;
+- `organizationId`;
+- `origin`;
+- `action`;
+- `outcome`;
+- `evidenceDigest`;
+- trusted `keyId`.
+
+Store the signed payload, signature, key ID, verified claims, and key-set version
+together. Obtain keys through a separately authenticated channel; never accept a
+verification key from the receipt it is supposed to verify.
+
+## Errors and redaction
+
+Every validation, transport, response, and receipt failure throws
+`WelesClientError` with a stable `code`. Non-2xx bodies are recursively redacted
+where object keys look sensitive. Redaction does not inspect free-form strings,
+so callers must still treat all service errors as potentially sensitive and avoid
+public logs.
+
+The library never logs. Applications own correlation IDs, metrics, audit,
+retention, and safe error presentation.
+
+## Operational model
+
+- **Configuration:** endpoint, bearer, organization ID, origin/action allowlists,
+  trusted receipt keys, and optional Fetch implementation.
+- **State:** no client database; callers retain idempotency keys, task IDs,
+  receipts, trusted-key versions, and reconciliation state.
+- **Credentials:** service bearer stays in the calling backend; workflow input
+  contains opaque references only.
+- **Observability:** stable error code, HTTP status where available, redacted
+  response details, service response, and verified receipt.
+- **Recovery:** no hidden retry. On ambiguous transport failure, query service
+  state through an approved channel using the original idempotency key.
+- **Cost:** the open client is not metered. Managed browser execution, recordings,
+  evidence retention, fleet operation, and support are separate service costs.
+
+## Project status and support
+
+- **Maturity:** public development source without a publishable manifest version.
+- **Public contract:** safe task/cancellation request construction, local
+  validation, redaction, and signed-receipt verification.
+- **Private service:** browser execution, service-specific workflows, scheduling,
+  evidence operation, stealth research, and support.
+- **Issues:** [`wisent-ai/weles-client`](https://github.com/wisent-ai/weles-client/issues).
+- **Security:** use [private GitHub Security Advisories](https://github.com/wisent-ai/weles-client/security/advisories/new); never attach bearers, private input, credential references, receipts containing customer metadata, target account data, or production endpoints to a public issue.
+- **License:** Apache License 2.0; see [`LICENSE`](LICENSE).
