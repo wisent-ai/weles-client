@@ -11,6 +11,147 @@
 submitting separately authorized browser workflows through exact origin, action,
 credential-reference, justification, and idempotency boundaries.**
 
+This repository is intentionally not the Weles executor. Fingerprint spoofing,
+browser patches, provider rotation, anti-bot research, service-specific
+trajectories, worker scheduling, operational recordings, and stealth
+configuration remain private in the hosted Weles service.
+
+## Install
+
+The client is currently distributed from its public source repository:
+
+```sh
+git clone https://github.com/wisent-ai/weles-client
+npm install --global ./weles-client
+```
+
+The installed package provides the JavaScript library and the
+`weles-skarbiec-acquire` executable. Until an immutable package release is
+published, pin the Git commit used by a deployment.
+
+## Hosted service configuration
+
+A Weles organization receives three non-interchangeable values from the hosted
+service operator:
+
+```sh
+export WELES_URL=https://weles.wisent.com/api/v1/
+export WISENT_ORGANIZATION_ID=<organization-uuid>
+export WELES_TOKEN=<organization-scoped-token>
+```
+
+`WELES_URL` is the API base, not the dashboard origin. The token must belong to
+the same organization ID and carry only the required task create, read, and
+cancel scopes. The hosted API rejects an organization mismatch.
+
+## Skarbiec credential lifecycle
+
+Skarbiec invokes an absolute, owner-controlled regular file rather than an npm
+shim. Point it at the executable inside the installed package:
+
+```sh
+export SKARBIEC_WELES_CREDENTIAL_COMMAND="$(npm root --global)/@wisent-ai/weles-client/bin/weles-skarbiec-acquire.mjs"
+
+skarbiec credential rotate weles-microsoft-primary-password \
+  --provider microsoft \
+  --consumer weles-microsoft-primary-password-writer \
+  --account owner@example.com \
+  --purpose incident-remediation
+
+skarbiec credential status weles-microsoft-primary-password
+```
+
+The bridge accepts only the fixed `skarbiec.credential-operation.v1` request.
+`mode: submit` binds its request ID to the Weles idempotency key and submits the
+allowlisted `skarbiec_credential_acquire` action; `mode: status` performs only a
+GET for the exact returned action-log ID. Operations are explicit `acquire`,
+`rotate`, `verify`, or `remove`. The bridge never accepts credential material
+on stdin or returns credential or task payload material on stdout.
+
+Before a real operation is queued, the Weles operator binds the organization to
+the customer's HTTPS Skarbiec endpoint and installs only the exact writer grant
+for each allowed item. The worker writes the credential directly to that tenant
+binding. Skarbiec completes an operation only when the encrypted item carries
+the matching request ID and operation—not merely because an item exists.
+Microsoft bindings also require the tenant's
+`acquisition-scopes.conf` to contain the exact row
+`<item>-reader-password|<item>|password`; wildcards are rejected. The request's
+item, provider, field, and writer consumer must match the fixed bridge contract.
+The account metadata must bind the same `skarbiec_credential_id` and
+`skarbiec_tenant_id`. Missing writer, reader, account, or tenant bindings return
+`needs_configuration` before any provider action is queued.
+
+Current contracts:
+
+| Skarbiec item | Provider | Stored field | Operations |
+| --- | --- | --- | --- |
+| `weles-semantic-scholar-api` | Semantic Scholar | `api_key` | acquire |
+| `weles-github-admin-org-token` | GitHub | `api_key` | acquire |
+| `weles-supabase-personal-access-token` | Supabase | `api_key` | acquire |
+| `weles-snapchat-snap-kit-api` | Snapchat | `api_key` | acquire |
+| `weles-microsoft-<account-alias>-password` | Microsoft | `password` | rotate, verify |
+
+Microsoft operations require `--account <email>`. Rotation authenticates the
+current password, changes it at Microsoft, freshly authenticates the generated
+replacement, and then commits it to Skarbiec. If the commit or fresh
+authentication fails, the worker attempts a provider-side rollback and verifies
+the previous password. MFA or passkey challenges stop as
+`needs_human_approval`; no local write is made.
+
+## Library usage
+
+```js
+import { randomBytes } from 'node:crypto';
+import { WelesClient } from '@wisent-ai/weles-client';
+
+const requestId = randomBytes(32).toString('hex');
+const client = new WelesClient({
+  endpoint: process.env.WELES_URL,
+  bearer: process.env.WELES_TOKEN,
+  organizationId: process.env.WISENT_ORGANIZATION_ID,
+  allowedOrigins: ['https://www.semanticscholar.org'],
+  allowedActions: ['skarbiec_credential_acquire'],
+});
+
+const accepted = await client.submit({
+  origin: 'https://www.semanticscholar.org',
+  action: 'skarbiec_credential_acquire',
+  input: {
+    requestId,
+    credentialId: 'weles-semantic-scholar-api',
+    provider: 'semantic_scholar',
+    consumer: 'research-agent',
+    purpose: 'literature-search',
+    dryRun: false,
+  },
+  credentialRefs: [],
+  evidencePolicy: 'action-log',
+  justification: 'Acquire the allowlisted API key directly into the tenant Skarbiec.',
+}, { idempotencyKey: requestId });
+
+const current = await client.get(accepted.taskId);
+```
+
+A client call either returns the service response, including a verified receipt
+when one is present, or throws `WelesClientError` with a stable error code. The
+library never logs on its own.
+
+### First-use onboarding adapter
+
+`createWelesClientOnboarding` is the product adapter for the shared Echo
+onboarding runtime. Pass its `JourneyClient` constructor, durable storage,
+Stado transport, stable subject hash, receipt subject, and receipt audience.
+The adapter pins the bundled `weles-client` / `first-use` definition and version,
+and delegates progress, sticky assignment, and the durable event queue to that
+runtime.
+
+Only `verifyFirstReceipt` can provide the
+`workflow_receipt_verified` completion fact. It first calls the public
+`verifyReceipt` signature verifier, then requires the signed `subject`,
+`audience`, and `product` claims to match the caller context and
+`weles-client`. Parsing a receipt, accepting a workflow request, provisioning,
+or observing private service state cannot complete onboarding.
+
 It is intentionally not the Weles browser executor. The package helps a caller
 form and verify the safe public contract; it does not grant target authorization,
 approve a workflow, run a browser, or prove that an external site permits
@@ -54,7 +195,7 @@ Weles Client serves:
 - separate opaque `credentialRefs`;
 - required human-readable submission justification and cancellation reason;
 - caller-controlled or randomly generated idempotency keys;
-- explicit submit and cancel operations with no hidden retry;
+- explicit submit, status-read, and cancel operations with no hidden retry;
 - response-error redaction by sensitive key name;
 - signature verification against a caller-owned key ID map;
 - equality checks between displayed receipt fields and signed claims;
@@ -75,9 +216,9 @@ Weles Client serves:
   displayed claims match it. It does not check key revocation, certificate
   chains, receipt freshness, evidence availability, target-side truth, or legal
   sufficiency.
-- The current API exposes submit and cancel only; task polling, evidence download,
-  key discovery, authentication enrollment, and policy administration are not
-  included.
+- The current API exposes submit, exact task-status reads, and cancel; evidence
+  download, key discovery, authentication enrollment, and policy administration
+  are not included.
 - Fingerprint behavior, browser patches, provider rotation, anti-bot research,
   service trajectories, scheduling, recordings, and stealth configuration remain
   private executor implementation and are not promised by this package.
@@ -87,10 +228,10 @@ Weles Client serves:
 | Surface | Requirement | Current state |
 |---|---|---|
 | Client import | Node.js ESM with global Fetch and `node:crypto` | Implemented source export |
-| Submit/cancel | authorized compatible Weles endpoint | Implemented |
+| Submit/status/cancel | authorized compatible Weles endpoint | Implemented |
 | Receipt verification | trusted public key keyed by receipt `keyId` | Implemented |
 | Automatic retry | — | Intentionally absent |
-| Task status/evidence retrieval | service API | Not exposed |
+| Evidence retrieval | service API | Not exposed |
 | Executor/browser | private operated service | Not in this repository |
 | Hosted service/SLA | approved Weles subscription | Not promised by source |
 
@@ -226,8 +367,12 @@ The client sends:
 - schema `weles.task.current`;
 - `organizationId`, normalized origin, exact action, and non-secret input;
 - opaque `credentialRefs` and evidence policy;
-- justification;
-- `Idempotency-Key` and bearer headers.
+- human-readable justification;
+- caller-controlled `Idempotency-Key` and bearer headers.
+
+Signed receipt claims bind task, organization, origin, action, outcome, and
+evidence digest. Consumers choose and rotate the trusted key set; an unknown key
+fails closed.
 
 If no key is supplied, the client generates a UUID. Persist your own operation ID
 when reconciliation across process restarts matters.
