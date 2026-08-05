@@ -20,10 +20,10 @@ automation.
 [Receipt verification](#receipt-verification) ·
 [Canonical repository](https://github.com/wisent-ai/weles-client)
 
-Current release status: public development source. The manifest has no version or
-publish script until an immutable package release is approved. Source
-availability does not promise a hosted Weles endpoint, approved trajectory,
-target support, evidence retention, or SLA.
+Current source version: `0.2.0`. A `v0.2.0` tag publishes the immutable package to
+npm with GitHub Actions OIDC provenance and attaches the same tarball plus SHA-256
+to GitHub Releases. Source availability does not promise a hosted Weles endpoint,
+approved trajectory, target support, evidence retention, or SLA.
 
 ## Problem and intended users
 
@@ -54,7 +54,7 @@ Weles Client serves:
 - separate opaque `credentialRefs`;
 - required human-readable submission justification and cancellation reason;
 - caller-controlled or randomly generated idempotency keys;
-- explicit submit and cancel operations with no hidden retry;
+- explicit submit, task-status, cancel, and service-version operations with no hidden retry;
 - response-error redaction by sensitive key name;
 - signature verification against a caller-owned key ID map;
 - equality checks between displayed receipt fields and signed claims;
@@ -75,9 +75,8 @@ Weles Client serves:
   displayed claims match it. It does not check key revocation, certificate
   chains, receipt freshness, evidence availability, target-side truth, or legal
   sufficiency.
-- The current API exposes submit and cancel only; task polling, evidence download,
-  key discovery, authentication enrollment, and policy administration are not
-  included.
+- Evidence download, key discovery, authentication enrollment, and policy
+  administration are not included.
 - Fingerprint behavior, browser patches, provider rotation, anti-bot research,
   service trajectories, scheduling, recordings, and stealth configuration remain
   private executor implementation and are not promised by this package.
@@ -86,11 +85,12 @@ Weles Client serves:
 
 | Surface | Requirement | Current state |
 |---|---|---|
-| Client import | Node.js ESM with global Fetch and `node:crypto` | Implemented source export |
-| Submit/cancel | authorized compatible Weles endpoint | Implemented |
+| Client import | Node.js ESM with global Fetch and `node:crypto` | Versioned `0.2.0` source export |
+| Submit/status/cancel | authorized compatible Weles endpoint | Implemented with v1 schemas |
+| Service compatibility | `GET /api/v1/version` | Supports client generations 0.2 and 0.1 |
 | Receipt verification | trusted public key keyed by receipt `keyId` | Implemented |
 | Automatic retry | — | Intentionally absent |
-| Task status/evidence retrieval | service API | Not exposed |
+| Evidence retrieval | service API | Not exposed |
 | Executor/browser | private operated service | Not in this repository |
 | Hosted service/SLA | approved Weles subscription | Not promised by source |
 
@@ -102,7 +102,7 @@ Weles Client serves:
 - **Initial state:** exact HTTPS endpoint, organization, origin, action, trusted
   receipt keys, non-secret input, credential references, and justification are
   explicit.
-- **Outcome:** the client sends `weles.task.current` with an idempotency key and
+- **Outcome:** the client sends `weles.task.v1` with an idempotency key and
   verifies any receipt returned in the response.
 - **Boundary:** acceptance is not completion; the action still depends on
   executor policy, target state, authorization, and human approval where needed.
@@ -223,7 +223,7 @@ const accepted = await client.submit({
 
 The client sends:
 
-- schema `weles.task.current`;
+- schema `weles.task.v1`;
 - `organizationId`, normalized origin, exact action, and non-secret input;
 - opaque `credentialRefs` and evidence policy;
 - justification;
@@ -246,6 +246,19 @@ Transport ambiguity is returned as `transport-failed`; the library does not
 retry. Reconcile with the service using an approved task-status channel before
 submitting a new operation.
 
+### Status and compatibility
+
+```js
+const task = await client.get(taskId, { signal: abortController.signal });
+const service = await client.version({ signal: abortController.signal });
+```
+
+`get` requires a `weles.task-status.v1` response and verifies an included receipt.
+`version` requires `weles.version.v1`; its compatibility block identifies the
+current client generation, minimum accepted generation, and retained generation
+count. Version `0.2.0` and `0.1.x` use the same v1 wire schemas.
+
+
 ## Receipt verification
 
 ```js
@@ -253,8 +266,11 @@ const claims = verifyReceipt(receipt, {
   "current-signing-key": process.env.WELES_RECEIPT_PUBLIC_KEY,
 });
 ```
-
-The supported receipt schema is `weles.receipt.current`. Verification binds:
+The current receipt schema is `weles.receipt.v1`. For one N-1 compatibility
+generation, verification also accepts signed `weles.receipt.current` receipts;
+all signature and displayed-claim checks are identical. Receipt signatures are
+Ed25519 over the exact UTF-8 bytes in `signedPayload`; `signature` is canonical
+padded base64. Keys from any other algorithm fail closed. Verification binds:
 
 - `taskId`;
 - `organizationId`;
@@ -294,11 +310,20 @@ retention, and safe error presentation.
 - **Cost:** the open client is not metered. Managed browser execution, recordings,
   evidence retention, fleet operation, and support are separate service costs.
 
+## Release authorization
+
+Only a `v<package-version>` tag pushed by an actor named in the comma-separated
+`WELES_RELEASE_APPROVERS` repository variable may publish. The workflow fails
+before package setup when the variable is empty or the actor is absent. npm
+trusted publishing binds the public package to that GitHub Actions workflow;
+the workflow also publishes the exact packed archive, checksum, and provenance
+through an immutable GitHub Release.
+
 ## Project status and support
 
-- **Maturity:** public development source without a publishable manifest version.
-- **Public contract:** safe task/cancellation request construction, local
-  validation, redaction, and signed-receipt verification.
+- **Maturity:** versioned `0.2.0` source with an npm trusted-publishing workflow.
+- **Public contract:** v1 task submission, status, cancellation and service-version
+  schemas, local validation, redaction, and signed-receipt verification.
 - **Private service:** browser execution, service-specific workflows, scheduling,
   evidence operation, stealth research, and support.
 - **Issues:** [`wisent-ai/weles-client`](https://github.com/wisent-ai/weles-client/issues).

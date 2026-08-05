@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weles.wisent.com/schemas/cancellation.v1.json",
+  "title": "Weles cancellation request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "organizationId", "reason"],
+  "properties": {
+    "schema": { "const": "weles.cancellation.v1" },
+    "organizationId": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+  }
+}

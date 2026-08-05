@@ -2,6 +2,18 @@ import { randomUUID, verify as verifySignature } from 'node:crypto';
 
 const SENSITIVE_KEY = /password|secret|token|cookie|authorization|proxy.?auth/i;
 const REDACTED = '[REDACTED]';
+const SUPPORTED_RECEIPT_SCHEMAS = Object.freeze({
+  'weles.receipt.v1': true,
+  'weles.receipt.current': true,
+});
+
+export const WelesSchemas = Object.freeze({
+  task: 'weles.task.v1',
+  cancellation: 'weles.cancellation.v1',
+  taskStatus: 'weles.task-status.v1',
+  receipt: 'weles.receipt.v1',
+  version: 'weles.version.v1',
+});
 
 export class WelesClientError extends Error {
   constructor(code, message, details) {
@@ -40,7 +52,7 @@ export class WelesClient {
     assertNoSensitiveFields(request.input ?? {}, 'input');
     const idempotencyKey = requireText(options.idempotencyKey ?? randomUUID(), 'idempotencyKey');
     const body = {
-      schema: 'weles.task.current',
+      schema: WelesSchemas.task,
       organizationId: this.organizationId,
       origin,
       action,
@@ -49,7 +61,7 @@ export class WelesClient {
       evidencePolicy: request.evidencePolicy ?? 'receipt',
       justification: requireText(request.justification, 'justification'),
     };
-    const response = await this.request('/tasks', {
+    const response = await this.request('tasks', {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
       body,
@@ -64,11 +76,11 @@ export class WelesClient {
   async cancel(taskId, options = {}) {
     const id = requireText(taskId, 'taskId');
     const idempotencyKey = requireText(options.idempotencyKey ?? randomUUID(), 'idempotencyKey');
-    const response = await this.request(`/tasks/${encodeURIComponent(id)}/cancel`, {
+    const response = await this.request(`tasks/${encodeURIComponent(id)}/cancel`, {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
       body: {
-        schema: 'weles.cancellation.current',
+        schema: WelesSchemas.cancellation,
         organizationId: this.organizationId,
         reason: requireText(options.reason, 'reason'),
       },
@@ -80,6 +92,34 @@ export class WelesClient {
     return response;
   }
 
+  async get(taskId, options = {}) {
+    const id = requireText(taskId, 'taskId');
+    const response = await this.request(`tasks/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      signal: options.signal,
+    });
+    if (response.schema !== WelesSchemas.taskStatus) {
+      throw new WelesClientError('unsupported-task-status', 'The task status schema is not supported', {
+        schema: response.schema,
+      });
+    }
+    if (response.receipt) verifyReceipt(response.receipt, this.receiptKeys);
+    return response;
+  }
+  async version(options = {}) {
+    const response = await this.request('version', {
+      method: 'GET',
+      signal: options.signal,
+    });
+    if (response.schema !== WelesSchemas.version) {
+      throw new WelesClientError('unsupported-service-version', 'The service version schema is not supported', {
+        schema: response.schema,
+      });
+    }
+    return response;
+  }
+
+
   async request(path, options) {
     let response;
     try {
@@ -87,11 +127,11 @@ export class WelesClient {
         method: options.method,
         headers: {
           Authorization: `Bearer ${this.bearer}`,
-          'Content-Type': 'application/json',
+          ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
           Accept: 'application/json',
           ...options.headers,
         },
-        body: JSON.stringify(options.body),
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
         signal: options.signal,
       });
     } catch (error) {
@@ -118,7 +158,7 @@ export class WelesClient {
 export function verifyReceipt(receipt, keys) {
   requireObject(receipt, 'receipt');
   const schema = requireText(receipt.schema, 'receipt.schema');
-  if (schema !== 'weles.receipt.current') {
+  if (!SUPPORTED_RECEIPT_SCHEMAS[schema]) {
     throw new WelesClientError('unsupported-receipt', 'The receipt schema is not supported', { schema });
   }
   const keyId = requireText(receipt.keyId, 'receipt.keyId');
@@ -129,7 +169,15 @@ export function verifyReceipt(receipt, keys) {
   if (!publicKey) {
     throw new WelesClientError('unknown-receipt-key', 'No trusted public key matches the receipt key identifier', { keyId });
   }
-  const valid = verifySignature(null, Buffer.from(signedPayload), publicKey, Buffer.from(signature, 'base64'));
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signature) || signature.length % 4 !== 0) {
+    throw new WelesClientError('invalid-receipt-signature', 'The receipt signature is not canonical base64', { keyId });
+  }
+  let valid;
+  try {
+    valid = verifySignature(null, Buffer.from(signedPayload), publicKey, Buffer.from(signature, 'base64'));
+  } catch {
+    throw new WelesClientError('invalid-receipt-key', 'The trusted receipt key is not a usable Ed25519 public key', { keyId });
+  }
   if (!valid) {
     throw new WelesClientError('invalid-receipt-signature', 'The receipt signature is invalid', { keyId });
   }
@@ -140,7 +188,14 @@ export function verifyReceipt(receipt, keys) {
     throw new WelesClientError('invalid-receipt-payload', 'The signed receipt payload is not JSON');
   }
   requireObject(claims, 'receipt claims');
-  for (const field of ['taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest']) {
+  for (const field of ['schema', 'taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest', 'keyId']) {
+    requireText(claims[field], `receipt claims.${field}`);
+  }
+  if (!SUPPORTED_RECEIPT_SCHEMAS[claims.schema] || !['succeeded', 'failed', 'cancelled'].includes(claims.outcome)
+      || typeof claims.evidenceDigest !== 'string' || !/^[0-9a-f]{64}$/.test(claims.evidenceDigest)) {
+    throw new WelesClientError('invalid-receipt-payload', 'The signed receipt claims violate the receipt contract');
+  }
+  for (const field of ['schema', 'taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest', 'keyId']) {
     if (receipt[field] !== claims[field]) {
       throw new WelesClientError('receipt-claim-mismatch', 'A displayed receipt field differs from the signed claim', { field });
     }
@@ -191,7 +246,7 @@ function secureBaseUrl(value) {
   url.password = '';
   url.search = '';
   url.hash = '';
-  return url;
+  return new URL('/api/v1/', url);
 }
 
 function normalizeOrigin(value) {

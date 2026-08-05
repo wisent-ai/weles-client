@@ -1,14 +1,27 @@
 {
   "name": "@wisent-ai/weles-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Safe client and receipt verifier for authorized Weles workflows",
   "type": "module",
-  "exports": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./schemas/task.v1": "./schemas/task.v1.schema.json",
+    "./schemas/cancellation.v1": "./schemas/cancellation.v1.schema.json",
+    "./schemas/task-status.v1": "./schemas/task-status.v1.schema.json",
+    "./schemas/receipt.v1": "./schemas/receipt.v1.schema.json",
+    "./schemas/version.v1": "./schemas/version.v1.schema.json",
+    "./schemas/receipt.current": "./schemas/receipt.current.schema.json"
+  },
   "files": [
     "src",
+    "schemas",
     "LICENSE",
     "README.md",
     "SECURITY.md"
   ],
-  "license": "SEE LICENSE IN LICENSE"
+  "license": "SEE LICENSE IN LICENSE",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }
