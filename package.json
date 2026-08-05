@@ -1,14 +1,25 @@
 {
   "name": "@wisent-ai/weles-client",
   "version": "0.1.0",
-  "description": "Safe client and receipt verifier for authorized Weles workflows",
+  "description": "Safe client and signed receipt verifier for authorized Weles workflows",
   "type": "module",
   "exports": "./src/index.mjs",
+  "bin": {
+    "weles-skarbiec-acquire": "./bin/weles-skarbiec-acquire.mjs"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
   "files": [
+    "bin",
     "src",
     "LICENSE",
     "README.md",
     "SECURITY.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wisent-ai/weles-client.git"
+  },
   "license": "SEE LICENSE IN LICENSE"
 }
