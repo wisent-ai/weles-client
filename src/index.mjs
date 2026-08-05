@@ -169,7 +169,15 @@ export function verifyReceipt(receipt, keys) {
   if (!publicKey) {
     throw new WelesClientError('unknown-receipt-key', 'No trusted public key matches the receipt key identifier', { keyId });
   }
-  const valid = verifySignature(null, Buffer.from(signedPayload), publicKey, Buffer.from(signature, 'base64'));
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signature) || signature.length % 4 !== 0) {
+    throw new WelesClientError('invalid-receipt-signature', 'The receipt signature is not canonical base64', { keyId });
+  }
+  let valid;
+  try {
+    valid = verifySignature(null, Buffer.from(signedPayload), publicKey, Buffer.from(signature, 'base64'));
+  } catch {
+    throw new WelesClientError('invalid-receipt-key', 'The trusted receipt key is not a usable Ed25519 public key', { keyId });
+  }
   if (!valid) {
     throw new WelesClientError('invalid-receipt-signature', 'The receipt signature is invalid', { keyId });
   }
@@ -180,7 +188,14 @@ export function verifyReceipt(receipt, keys) {
     throw new WelesClientError('invalid-receipt-payload', 'The signed receipt payload is not JSON');
   }
   requireObject(claims, 'receipt claims');
-  for (const field of ['taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest']) {
+  for (const field of ['schema', 'taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest', 'keyId']) {
+    requireText(claims[field], `receipt claims.${field}`);
+  }
+  if (!SUPPORTED_RECEIPT_SCHEMAS[claims.schema] || !['succeeded', 'failed', 'cancelled'].includes(claims.outcome)
+      || typeof claims.evidenceDigest !== 'string' || !/^[0-9a-f]{64}$/.test(claims.evidenceDigest)) {
+    throw new WelesClientError('invalid-receipt-payload', 'The signed receipt claims violate the receipt contract');
+  }
+  for (const field of ['schema', 'taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest', 'keyId']) {
     if (receipt[field] !== claims[field]) {
       throw new WelesClientError('receipt-claim-mismatch', 'A displayed receipt field differs from the signed claim', { field });
     }

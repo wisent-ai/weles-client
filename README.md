@@ -268,7 +268,9 @@ const claims = verifyReceipt(receipt, {
 ```
 The current receipt schema is `weles.receipt.v1`. For one N-1 compatibility
 generation, verification also accepts signed `weles.receipt.current` receipts;
-all signature and displayed-claim checks are identical. Verification binds:
+all signature and displayed-claim checks are identical. Receipt signatures are
+Ed25519 over the exact UTF-8 bytes in `signedPayload`; `signature` is canonical
+padded base64. Keys from any other algorithm fail closed. Verification binds:
 
 - `taskId`;
 - `organizationId`;
