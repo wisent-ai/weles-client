@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weles.wisent.com/schemas/version.v1.json",
+  "title": "Weles service version v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "service", "release", "sourceRevision", "deploymentManifestSha256", "client", "database", "apiSchemas"],
+  "properties": {
+    "schema": { "const": "weles.version.v1" },
+    "service": { "const": "weles-web" },
+    "release": { "type": "string", "minLength": 1 },
+    "sourceRevision": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+    "deploymentManifestSha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentVersion", "minimumVersion", "supportedGenerations"],
+      "properties": {
+        "currentVersion": { "const": "0.2.0" },
+        "minimumVersion": { "const": "0.1.0" },
+        "supportedGenerations": { "const": 2 }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "minimumWorkerSchema", "maximumWorkerSchema"],
+      "properties": {
+        "schemaVersion": { "type": ["integer", "null"], "minimum": 1 },
+        "minimumWorkerSchema": { "type": ["integer", "null"], "minimum": 1 },
+        "maximumWorkerSchema": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "apiSchemas": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weles.wisent.com/schemas/task-status.v1.json",
+  "title": "Weles task status v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "taskId", "organizationId", "status", "createdAt", "updatedAt"],
+  "properties": {
+    "schema": { "const": "weles.task-status.v1" },
+    "taskId": { "type": "string", "minLength": 1 },
+    "organizationId": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["queued", "leased", "running", "succeeded", "failed", "cancelled"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "result": {},
+    "error": { "type": ["object", "null"] },
+    "receipt": { "anyOf": [{ "$ref": "receipt.v1.schema.json" }, { "$ref": "receipt.current.schema.json" }, { "type": "null" }] }
+  }
+}

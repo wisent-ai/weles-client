@@ -9,11 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          registry-url: https://registry.npmjs.org
       - name: Assert tag matches package version
         run: |
           declared="$(node -p "require('./package.json').version")"
@@ -26,6 +28,8 @@ jobs:
           archive="$(npm pack --silent)"
           openssl dgst -sha256 -r "$archive" > "$archive.sha256"
           printf '%s\n' "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Publish npm package with provenance
+        run: npm publish --access public --provenance
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

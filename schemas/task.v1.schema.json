@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weles.wisent.com/schemas/task.v1.json",
+  "title": "Weles task request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "organizationId", "origin", "action", "input", "credentialRefs", "evidencePolicy", "justification"],
+  "properties": {
+    "schema": { "const": "weles.task.v1" },
+    "organizationId": { "type": "string", "minLength": 1 },
+    "origin": { "type": "string", "format": "uri" },
+    "action": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "input": { "type": "object" },
+    "credentialRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "evidencePolicy": { "type": "string", "enum": ["receipt", "summary", "full"] },
+    "justification": { "type": "string", "minLength": 1 }
+  }
+}
