@@ -310,6 +310,15 @@ retention, and safe error presentation.
 - **Cost:** the open client is not metered. Managed browser execution, recordings,
   evidence retention, fleet operation, and support are separate service costs.
 
+## Release authorization
+
+Only a `v<package-version>` tag pushed by an actor named in the comma-separated
+`WELES_RELEASE_APPROVERS` repository variable may publish. The workflow fails
+before package setup when the variable is empty or the actor is absent. npm
+trusted publishing binds the public package to that GitHub Actions workflow;
+the workflow also publishes the exact packed archive, checksum, and provenance
+through an immutable GitHub Release.
+
 ## Project status and support
 
 - **Maturity:** versioned `0.2.0` source with an npm trusted-publishing workflow.
