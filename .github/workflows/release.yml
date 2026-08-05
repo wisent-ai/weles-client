@@ -4,6 +4,10 @@ on:
   push:
     tags: [ "v*" ]
 
+concurrency:
+  group: weles-client-release
+  cancel-in-progress: false
+
 jobs:
   package:
     runs-on: ubuntu-24.04
