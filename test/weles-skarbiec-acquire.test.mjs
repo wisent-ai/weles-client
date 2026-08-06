@@ -467,7 +467,7 @@ test('a receipt for another principal rejects the whole response', async (contex
               receipt: {
                 tenant_id: entraTenantId,
                 principal_object_id: '4c888895-03cf-4ab1-a11e-46942c568217',
-                account_upn: 'jakub@wisent.com',
+                account_upn: 'jakub@wisent.ai',
                 operation: 'verify',
                 request_id: requestId,
                 evidence_digest: 'c'.repeat(64),

@@ -142,7 +142,7 @@ Current contracts:
 | `weles-github-admin-org-token` | GitHub | `api_key` | acquire |
 | `weles-supabase-personal-access-token` | Supabase | `api_key` | acquire |
 | `weles-snapchat-snap-kit-api` | Snapchat | `api_key` | acquire |
-| `weles-microsoft-jakub-wisent-com-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
+| `weles-microsoft-jakub-wisent-ai-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
 | `weles-microsoft-lukasz-wisent-com-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
 | `weles-microsoft-<account-alias>-password` | Microsoft consumer account | `password` | rotate, verify |
 
@@ -155,7 +155,7 @@ request's `directory` block must match the bridge contract field by field,
 
 | Item | UPN | Tenant | Principal object ID |
 | --- | --- | --- | --- |
-| `weles-microsoft-jakub-wisent-com-password` | `jakub@wisent.com` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `4c888895-03cf-4ab1-a11e-46942c568217` |
+| `weles-microsoft-jakub-wisent-ai-password` | `jakub@wisent.ai` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `4c888895-03cf-4ab1-a11e-46942c568217` |
 | `weles-microsoft-lukasz-wisent-com-password` | `lukasz@wisent.com` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `1f636f97-b07f-4e9b-952a-5d069ccc5b20` |
 
 Any other combination returns `needs_configuration` with
