@@ -1,8 +1,13 @@
 import { createHash, randomUUID, verify as verifySignature } from 'node:crypto';
 
 const SENSITIVE_KEY = /password|secret|token|cookie|authorization|proxy.?auth/i;
+// A resume token is the single-use continuation handle Weles issues for its own
+// paused approval, not credential material, so it may travel back in task input.
+// `redact` still matches it, so it never reaches a log or an error detail.
+const RESUMPTION_KEY = /^resume_?token$/i;
 const REDACTED = '[REDACTED]';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
+const LOOPBACK_HOSTS = Object.freeze(['127.0.0.1', 'localhost', '[::1]']);
 
 async function boundedResponseText(response) {
   const declaredLength = Number(response.headers?.get?.('content-length'));
@@ -218,7 +223,7 @@ export function assertNoSensitiveFields(value, path = 'value') {
     return;
   }
   for (const [key, item] of Object.entries(value)) {
-    if (SENSITIVE_KEY.test(key)) {
+    if (SENSITIVE_KEY.test(key) && !RESUMPTION_KEY.test(key)) {
       throw new WelesClientError('plaintext-secret-denied', 'Send a credential reference instead of sensitive plaintext', { path: `${path}.${key}` });
     }
     assertNoSensitiveFields(item, `${path}.${key}`);
@@ -232,8 +237,8 @@ function secureBaseUrl(value) {
   } catch {
     throw new WelesClientError('invalid-endpoint', 'endpoint must be an absolute URL');
   }
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && url.hostname === 'localhost')) {
-    throw new WelesClientError('insecure-endpoint', 'endpoint must use HTTPS or HTTP on localhost');
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && LOOPBACK_HOSTS.includes(url.hostname))) {
+    throw new WelesClientError('insecure-endpoint', 'endpoint must use HTTPS or HTTP on a loopback host');
   }
   if (url.username || url.password || url.search || url.hash) {
     throw new WelesClientError('invalid-endpoint', 'endpoint must not contain credentials, query, or fragment');
