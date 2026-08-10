@@ -76,16 +76,20 @@ shim. Point it at the executable inside the installed package:
 ```sh
 export SKARBIEC_WELES_CREDENTIAL_COMMAND="$(npm root --global)/@wisent-ai/weles-client/bin/weles-skarbiec-acquire.mjs"
 
+# adopt names the reader consumer: Skarbiec stages the candidate against it, so
+# only that consumer may read the candidate back for the proof login.
 skarbiec credential adopt weles-microsoft-lukasz-wisent-com-password \
-  --provider microsoft_entra \
-  --consumer weles-microsoft-lukasz-wisent-com-password-writer \
-  --expect-upn lukasz@wisent.com \
-  --expect-tenant 23572277-0021-42ac-b2b9-10bd86c7d2af \
-  --expect-object-id 1f636f97-b07f-4e9b-952a-5d069ccc5b20 \
-  --purpose adopt-the-known-current-password
+  --provider microsoft \
+  --account lukasz@wisent.com \
+  --consumer weles-microsoft-lukasz-wisent-com-password-reader-password \
+  --purpose adopt-the-known-current-password \
+  --password-stdin
 
+# rotate and verify name the writer consumer: the managed write is authorized
+# only for the consumer the request record carries.
 skarbiec credential rotate weles-microsoft-lukasz-wisent-com-password \
-  --provider microsoft_entra \
+  --provider microsoft \
+  --account lukasz@wisent.com \
   --consumer weles-microsoft-lukasz-wisent-com-password-writer \
   --purpose incident-remediation
 
@@ -129,7 +133,9 @@ the matching request ID and operation—not merely because an item exists.
 Microsoft bindings also require the tenant's
 `acquisition-scopes.conf` to contain the exact row
 `<item>-reader-password|<item>|password`; wildcards are rejected. The request's
-item, provider, field, and writer consumer must match the fixed bridge contract.
+item, provider, and field must match the fixed bridge contract, and the
+consumer must be the exact writer consumer — or, for a Microsoft `adopt`, the
+exact reader consumer the candidate was staged against.
 The account metadata must bind the same `skarbiec_credential_id` and
 `skarbiec_tenant_id`. Missing writer, reader, account, or tenant bindings return
 `needs_configuration` before any provider action is queued.
@@ -143,12 +149,12 @@ Current contracts:
 | `weles-supabase-personal-access-token` | Supabase | `api_key` | acquire |
 | `weles-snapchat-snap-kit-api` | Snapchat | `api_key` | acquire |
 | `weles-microsoft-jakub-wisent-ai-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
-| `weles-microsoft-lukasz-wisent-com-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
-| `weles-microsoft-<account-alias>-password` | Microsoft consumer account | `password` | rotate, verify |
+| `weles-microsoft-lukasz-wisent-com-password` | Microsoft consumer account | `password` | adopt, rotate, verify |
+| `weles-microsoft-<account-alias>-password` | Microsoft consumer account | `password` | adopt, rotate, verify |
 
 ### Microsoft Entra password lifecycle
 
-The two `microsoft_entra` items are pinned to one directory identity each. The
+The `microsoft_entra` item is pinned to one directory identity. The
 request's `directory` block must match the bridge contract field by field,
 `directory.provider` must equal the request `provider`, and `field` must be
 `password`:
@@ -156,7 +162,11 @@ request's `directory` block must match the bridge contract field by field,
 | Item | UPN | Tenant | Principal object ID |
 | --- | --- | --- | --- |
 | `weles-microsoft-jakub-wisent-ai-password` | `jakub@wisent.ai` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `4c888895-03cf-4ab1-a11e-46942c568217` |
-| `weles-microsoft-lukasz-wisent-com-password` | `lukasz@wisent.com` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `1f636f97-b07f-4e9b-952a-5d069ccc5b20` |
+
+`weles-microsoft-lukasz-wisent-com-password` is a personal Microsoft account
+that only guests in that tenant, so the directory does not hold its password:
+its lifecycle is provider `microsoft` with `--account lukasz@wisent.com`, never
+`microsoft_entra`.
 
 Any other combination returns `needs_configuration` with
 `code: ENTRA_IDENTITY_CONTRACT_MISMATCH` before Weles is contacted, and so does
@@ -186,7 +196,11 @@ other action is an identity mismatch: `adopt` to
 `microsoft_entra_adopt_password`, `verify` to `microsoft_entra_verify_password`,
 `rotate` and `reset` to `microsoft_entra_reset_password`. A status read also
 requires the task's `params.constraints.directory` to match the request's
-`directory` block field by field.
+`directory` block field by field. For provider `microsoft` the mapping is
+`adopt` to `microsoft_adopt_password`, `verify` to `microsoft_verify_password`,
+and `rotate` to `microsoft_reset_password`, and the status read requires the
+task's `params.constraints.account_email` to equal the request's
+`account_email`.
 
 Before any password change, and again after the fresh login, the worker confirms
 that the signed-in identity carries exactly the expected tenant `tid`, principal

@@ -19,7 +19,7 @@ const REQUEST_VERSION = 'skarbiec.credential-operation.v3';
 const STADO_FORWARD_SERVICE = 'weles-admission';
 const GROUP_WORLD_WRITE = Number('0o22');
 const ACQUIRE_ONLY = Object.freeze(['acquire']);
-const MICROSOFT_OPERATIONS = Object.freeze(['rotate', 'verify']);
+const MICROSOFT_OPERATIONS = Object.freeze(['adopt', 'rotate', 'verify']);
 const ENTRA_OPERATIONS = Object.freeze(['adopt', 'rotate', 'reset', 'verify']);
 const ENTRA_ORIGIN = 'https://login.microsoftonline.com';
 const ENTRA_TENANT_ID = '23572277-0021-42ac-b2b9-10bd86c7d2af';
@@ -60,7 +60,6 @@ const CONTRACTS = Object.freeze({
   'weles-supabase-personal-access-token': Object.freeze({ provider: 'supabase', secret: 'supabase.personal_access_token', origin: 'https://supabase.com', field: 'api_key', consumer: 'weles-supabase-personal-access-token-writer', operations: ACQUIRE_ONLY }),
   'weles-snapchat-snap-kit-api': Object.freeze({ provider: 'snapchat', secret: 'snapchat.snap_kit_api_token', origin: 'https://kit.snapchat.com', field: 'api_key', consumer: 'weles-snapchat-snap-kit-api-writer', operations: ACQUIRE_ONLY }),
   'weles-microsoft-jakub-wisent-ai-password': Object.freeze({ provider: 'microsoft_entra', secret: 'weles-microsoft-jakub-wisent-ai-password', origin: ENTRA_ORIGIN, field: 'password', consumer: 'weles-microsoft-jakub-wisent-ai-password-writer', operations: ENTRA_OPERATIONS, accountUpn: 'jakub@wisent.ai', tenantId: ENTRA_TENANT_ID, principalObjectId: '4c888895-03cf-4ab1-a11e-46942c568217' }),
-  'weles-microsoft-lukasz-wisent-com-password': Object.freeze({ provider: 'microsoft_entra', secret: 'weles-microsoft-lukasz-wisent-com-password', origin: ENTRA_ORIGIN, field: 'password', consumer: 'weles-microsoft-lukasz-wisent-com-password-writer', operations: ENTRA_OPERATIONS, accountUpn: 'lukasz@wisent.com', tenantId: ENTRA_TENANT_ID, principalObjectId: '1f636f97-b07f-4e9b-952a-5d069ccc5b20' }),
 });
 const MICROSOFT_CREDENTIAL_ID = /^weles-microsoft-[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?-password$/;
 
@@ -469,9 +468,11 @@ function expectedTaskActions(request) {
     return ENTRA_TASK_ACTIONS[request.operation] ?? NO_TASK_ACTIONS;
   }
   if (request.provider === 'microsoft') {
-    return request.operation === 'verify'
-      ? ['microsoft_verify_password']
-      : ['microsoft_reset_password'];
+    return request.operation === 'adopt'
+      ? ['microsoft_adopt_password']
+      : request.operation === 'verify'
+        ? ['microsoft_verify_password']
+        : ['microsoft_reset_password'];
   }
   if (request.credential_id === 'weles-semantic-scholar-api') {
     return ['generic_keeper_task', 'semanticscholar_key_followup'];
@@ -560,10 +561,16 @@ function approvedTransition(task, request) {
 const request = await readRequest();
 validateRequest(request);
 const contract = contractFor(request);
+// A Microsoft password lifecycle names its exact writer consumer for rotate and
+// verify and its exact reader consumer for adopt: Skarbiec stages the adopt
+// candidate against the reader consumer, so only that consumer may read it back.
+const microsoftConsumer = request.provider === 'microsoft'
+    && MICROSOFT_CREDENTIAL_ID.test(request.credential_id)
+    && [`${request.credential_id}-writer`, `${request.credential_id}-reader-password`].includes(request.consumer);
 if (!contract
     || contract.provider !== request.provider
     || contract.field !== request.field
-    || contract.consumer !== request.consumer) {
+    || (contract.consumer !== request.consumer && !microsoftConsumer)) {
   await emit(unsupported(
     request,
     'needs_configuration',
