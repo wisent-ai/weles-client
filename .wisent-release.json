@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "product": "weles-client",
+  "releases": true,
+  "version_source": {
+    "kind": "json",
+    "path": "package.json",
+    "pointer": "/version"
+  },
+  "platforms": {
+    "node-archive": {
+      "runner_platform": "linux-amd64",
+      "quality": [
+        {
+          "name": "node-syntax",
+          "argv": ["bash", "release/quality.sh"]
+        }
+      ],
+      "build": {
+        "argv": ["bash", "release/build.sh"]
+      },
+      "stage": {
+        "dist/weles-client.tgz": "weles-client.tgz",
+        "dist/weles-client.tgz.sha256": "weles-client.tgz.sha256",
+        "dist/SOURCE_REVISION": "SOURCE_REVISION"
+      },
+      "secret_env": {}
+    }
+  },
+  "promotion": {
+    "channels": ["candidate", "stable"],
+    "reconcile": false
+  },
+  "deliveries": [
+    {
+      "name": "github-mirror",
+      "platform": "node-archive",
+      "argv": ["python3", "release/deliver-github-mirror.py"],
+      "required": false,
+      "secret_env": {
+        "WISENT_MIRROR_TOKEN": "github-release-mirror#token"
+      }
+    }
+  ]
+}
