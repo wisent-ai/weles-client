@@ -10,9 +10,23 @@
 
 # Weles Client
 
-**Weles Client is a small public Node.js client and signed-receipt verifier for
-submitting separately authorized browser workflows through exact origin, action,
-credential-reference, justification, and idempotency boundaries.**
+Your AI agents deserve to explore the entire internet. AI can now write
+software, reason for hours, and order your groceries, but it still fails or
+takes ages when you ask it to open a website and log in to your account.
+
+Weles is the solution. We turn the open internet into an API.
+
+Weles is an undetectable browser that combines custom C++-patched Chromium and
+Firefox forks with rotating fingerprints to stop your AI from running into
+CAPTCHAs and bans. Every time you crawl a website, it gets mapped into a
+trajectory, allowing future runs to use the cached traversal instead of having
+to rediscover how the website works. When a run fails, Weles records videos
+showing the points of failure to give you a clear understanding of what happened
+and how it can be fixed.
+
+Give your AI the keys to the internet. The browser-use experience your AI
+deserves. This is the public Node.js client you call it from, and the verifier
+for the signed receipt it gives back.
 
 This repository is intentionally not the Weles executor. Fingerprint spoofing,
 browser patches, provider rotation, anti-bot research, service-specific
