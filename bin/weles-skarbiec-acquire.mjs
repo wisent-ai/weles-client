@@ -120,6 +120,31 @@ function requiredEnvironment(name) {
   return value;
 }
 
+function loopbackEndpoint(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function callerIdentity(endpoint) {
+  if (!loopbackEndpoint(endpoint)) {
+    return {
+      bearer: requiredEnvironment('WELES_TOKEN'),
+      organizationId: requiredEnvironment('WISENT_ORGANIZATION_ID'),
+    };
+  }
+  const bearer = process.env.WELES_TOKEN?.trim() ?? '';
+  const organizationId = process.env.WISENT_ORGANIZATION_ID?.trim() ?? '';
+  return {
+    bearer: bearer || null,
+    organizationId: organizationId || 'loopback',
+  };
+}
+
 function stadoForwardsDirectory() {
   const configured = process.env.STADO_FORWARDS_DIR?.trim() ?? '';
   if (configured) return configured;
@@ -704,10 +729,11 @@ try {
   process.exit(ZERO);
 }
 
+const identity = callerIdentity(endpoint);
 const client = new WelesClient({
   endpoint,
-  bearer: requiredEnvironment('WELES_TOKEN'),
-  organizationId: requiredEnvironment('WISENT_ORGANIZATION_ID'),
+  bearer: identity.bearer,
+  organizationId: identity.organizationId,
   allowedOrigins: [contract.origin],
   allowedActions: [ACTION],
 });

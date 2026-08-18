@@ -51,7 +51,9 @@ export class WelesClient {
   constructor(options) {
     requireObject(options, 'options');
     this.endpoint = secureBaseUrl(options.endpoint);
-    this.bearer = requireText(options.bearer, 'bearer');
+    this.bearer = isLoopbackEndpoint(this.endpoint)
+      ? optionalText(options.bearer, 'bearer')
+      : requireText(options.bearer, 'bearer');
     this.organizationId = requireText(options.organizationId, 'organizationId');
     this.allowedOrigins = new Set(requireTextArray(options.allowedOrigins, 'allowedOrigins').map(normalizeOrigin));
     this.allowedActions = new Set(requireTextArray(options.allowedActions, 'allowedActions'));
@@ -133,7 +135,7 @@ export class WelesClient {
       response = await this.fetch(new URL(path, this.endpoint), {
         method: options.method,
         headers: {
-          Authorization: `Bearer ${this.bearer}`,
+          ...(this.bearer ? { Authorization: `Bearer ${this.bearer}` } : {}),
           'Content-Type': 'application/json',
           Accept: 'application/json',
           ...options.headers,
@@ -277,6 +279,15 @@ function requireText(value, name) {
     throw new WelesClientError('invalid-input', `${name} must be a non-empty string`);
   }
   return value;
+}
+
+function isLoopbackEndpoint(url) {
+  return url.protocol === 'http:' && LOOPBACK_HOSTS.includes(url.hostname);
+}
+
+function optionalText(value, name) {
+  if (value === undefined || value === null || value === '') return null;
+  return requireText(value, name);
 }
 
 function requireTextArray(value, name) {
