@@ -62,6 +62,21 @@ const CONTRACTS = Object.freeze({
   'weles-microsoft-jakub-wisent-ai-password': Object.freeze({ provider: 'microsoft_entra', secret: 'weles-microsoft-jakub-wisent-ai-password', origin: ENTRA_ORIGIN, field: 'password', consumer: 'weles-microsoft-jakub-wisent-ai-password-writer', operations: ENTRA_OPERATIONS, accountUpn: 'jakub@wisent.ai', tenantId: ENTRA_TENANT_ID, principalObjectId: '4c888895-03cf-4ab1-a11e-46942c568217' }),
 });
 const MICROSOFT_CREDENTIAL_ID = /^weles-microsoft-[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?-password$/;
+// A provider nobody enumerated is still one exact contract. The shared credential
+// contract fixes the slug shape, the api_key field, `acquire` as the only allowed
+// operation, and the item id Skarbiec names; every named contract above keeps its
+// exact provider, origin, field, consumer, and operation set untouched.
+const GENERIC_SLUG = /^[a-z\d](?:[a-z\d-]{1,38}[a-z\d])$/;
+const GENERIC_FIELD = 'api_key';
+// The password lifecycles are contracts, not slugs: `microsoft` matches the
+// generic slug shape, so it is named here to keep an identity provider from ever
+// being served as a generic api_key acquisition.
+const NAMED_IDENTITY_PROVIDERS = Object.freeze(['microsoft', 'microsoft_entra']);
+// A slug names no site. When the caller declares the signup origin the browser
+// job starts there; with none declared it starts at exactly this discovery origin
+// and finds the provider's own API-key signup page from the slug, because
+// inventing a hostname out of the slug would claim a site nobody named.
+const GENERIC_DISCOVERY_ORIGIN = 'https://duckduckgo.com';
 
 function contractFor(request) {
   const exact = CONTRACTS[request.credential_id];
@@ -74,6 +89,26 @@ function contractFor(request) {
       field: 'password',
       consumer: `${request.credential_id}-writer`,
       operations: MICROSOFT_OPERATIONS,
+    });
+  }
+  // The generic contract is derived, never registered: the item is the id
+  // Skarbiec sends, the writer consumer is that item's writer exactly as every
+  // named contract spells it, and an item that already owns an exact contract
+  // (including a managed password id) never reaches this branch.
+  if (GENERIC_SLUG.test(request.provider)
+      && GENERIC_SLUG.test(request.credential_id)
+      && !NAMED_IDENTITY_PROVIDERS.includes(request.provider)
+      && !MICROSOFT_CREDENTIAL_ID.test(request.credential_id)
+      && request.field === GENERIC_FIELD) {
+    const signupOrigin = signupOriginText(request.signup_origin);
+    return Object.freeze({
+      provider: request.provider,
+      secret: request.credential_id,
+      origin: signupOrigin ?? GENERIC_DISCOVERY_ORIGIN,
+      field: GENERIC_FIELD,
+      consumer: `${request.credential_id}-writer`,
+      operations: ACQUIRE_ONLY,
+      signupOrigin: signupOrigin ?? null,
     });
   }
   return null;
@@ -154,6 +189,21 @@ function exactName(value, maximum) {
     && /^[A-Za-z\d._-]+$/.test(value);
 }
 
+// One spelling of the signup origin, shared with the `signup_origin` record
+// Skarbiec keeps for a generic acquire: an absolute HTTPS origin and nothing
+// else, so a path, query, fragment, userinfo, trailing slash, or upper-case host
+// is a different string and is refused rather than normalized.
+function signupOriginText(value) {
+  if (typeof value !== 'string' || value.length > FIVE_TWELVE) return undefined;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  return url.protocol === 'https:' && url.origin === value ? value : undefined;
+}
+
 // The directory identity is a sealed item contract, never a call argument, so the
 // bridge accepts exactly the four canonical fields and nothing else.
 function directoryBlock(value) {
@@ -215,6 +265,7 @@ function validateRequest(request) {
     'resume_token',
     'baseline_revision',
     'field',
+    'signup_origin',
     'status',
     'created_at',
     'dry_run',
@@ -242,6 +293,11 @@ function validateRequest(request) {
   }
   if (request.directory !== null && !directoryBlock(request.directory)) {
     throw new Error('invalid credential directory block');
+  }
+  if (request.signup_origin !== undefined
+      && request.signup_origin !== null
+      && !signupOriginText(request.signup_origin)) {
+    throw new Error('invalid credential signup origin');
   }
   if (!Number.isSafeInteger(request.baseline_revision) || request.baseline_revision < ZERO) {
     throw new Error('invalid credential baseline revision');
@@ -586,6 +642,19 @@ if (!contract.operations.includes(request.operation)) {
   ));
   process.exit(ZERO);
 }
+// Only a derived generic contract has a caller-declared site. A named contract
+// owns its origin, so a signup origin aimed at one of those items is refused
+// instead of redirecting a reviewed flow to another host.
+if (request.signup_origin && contract.signupOrigin === undefined) {
+  await emit(unsupported(
+    request,
+    'needs_configuration',
+    `A signup origin is only accepted for a generic provider, not ${request.credential_id}/${request.provider}`,
+    'SIGNUP_ORIGIN_NOT_ACCEPTED',
+    'admission',
+  ));
+  process.exit(ZERO);
+}
 if (request.provider === 'microsoft_entra'
     && (request.directory === null
       || request.directory.provider !== request.provider
@@ -673,6 +742,7 @@ const response = await client.submit({
     credentialId: request.credential_id,
     provider: request.provider,
     field: request.field,
+    ...(contract.signupOrigin ? { signupOrigin: contract.signupOrigin } : {}),
     consumer: request.consumer,
     purpose: request.purpose,
     accountEmail: request.account_email,
