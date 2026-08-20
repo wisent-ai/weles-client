@@ -1,13 +1,13 @@
 [automation]
 managed = true
-source_fingerprint = "ff3ef94609036b97"
+source_fingerprint = "4a9c0077c510ec59"
 category = "developer"
 
 [banner]
 title = "Authorize browser work. Verify every receipt."
 description = "Node.js client for submitting bounded browser workflows and verifying signed receipts."
 product = "Wisent"
-url = "wisent.ai"
+url = "wisent.com"
 theme = "dark"
 layout = "signal-left"
 art_seed = "weles-client"
