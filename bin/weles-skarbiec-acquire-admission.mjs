@@ -45,6 +45,7 @@ async function readRequest() {
     if (!request || typeof request !== 'object' || Array.isArray(request)) {
       throw new Error('credential request must be an object');
     }
+
     return request;
   } finally {
     bytes.fill(ZERO);
@@ -183,6 +184,11 @@ const allowedStatuses = new Set([
   'needs_configuration', 'needs_human_approval', 'unsupported_operation',
   'unsupported_secret', 'operation_failed',
 ]);
+// Admission wraps every success as { ok: true, data: <result> }; unwrap it
+// so the status fields the Skarbiec wire expects sit at the top level.
+if (payload && payload.ok === true && payload.data && typeof payload.data === 'object') {
+  payload = payload.data;
+}
 const status = typeof payload.status === 'string' ? payload.status : '';
 if (!allowedStatuses.has(status)) {
   throw new Error(`admission returned an unsupported credential-operation status: ${status || '(empty)'}`);
