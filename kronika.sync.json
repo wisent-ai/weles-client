@@ -8,7 +8,54 @@
         "bin",
         "README.md"
       ],
-      "instruction": "The docs must stay true to the weles-client source: every function, error code, schema, check order, and fail-closed gate they name must exist in src/index.mjs or bin/, and the receipt semantics must match verifyReceipt and verifyFirstReceipt."
+      "instruction": "The verifier reference must stay true to src/index.mjs: the receipt fields, the six verifyReceipt steps and their order, the verifyFirstReceipt claims, the onboarding bundle pinning, and every fail-closed gate must match the code exactly."
+    },
+    {
+      "output": "docs/errors.md",
+      "sources": [
+        "src/index.mjs",
+        "bin/weles-skarbiec-acquire.mjs",
+        "bin/weles-skarbiec-acquire-admission.mjs"
+      ],
+      "instruction": "The error reference must list every WelesClientError code thrown in src/index.mjs with its exact message and trigger, and the bridge status vocabulary and thrown strings must match bin/ verbatim."
+    },
+    {
+      "output": "docs/quick-start.md",
+      "sources": [
+        "src/index.mjs",
+        "docs/examples",
+        "README.md"
+      ],
+      "instruction": "Every command in the quick start must run as written from a plain checkout, and every pasted output block must be reproducible by the named example scripts."
+    },
+    {
+      "output": "docs/examples/README.md",
+      "sources": [
+        "docs/examples",
+        "src/index.mjs"
+      ],
+      "instruction": "The examples index must describe only scripts that exist in docs/examples and run end-to-end with Node alone, offline except loopback."
+    },
+    {
+      "output": "docs/examples/make-synthetic-receipt.mjs",
+      "sources": [
+        "src/index.mjs"
+      ],
+      "instruction": "The synthetic receipt this script writes must remain byte-for-byte the shape verifyReceipt accepts: schema weles.receipt.current, keyId/signature/signedPayload, and displayed copies of the six signed claims."
+    },
+    {
+      "output": "docs/examples/verify-receipt-offline.mjs",
+      "sources": [
+        "src/index.mjs"
+      ],
+      "instruction": "The script must verify through the exported verifyReceipt only, print frozen claims on success, and exit 1 with the WelesClientError code on refusal."
+    },
+    {
+      "output": "docs/examples/submit-loopback-demo.mjs",
+      "sources": [
+        "src/index.mjs"
+      ],
+      "instruction": "The demo must exercise the real WelesClient against loopback only, and the refusal codes it prints (origin-denied, action-denied, plaintext-secret-denied) must remain the codes submit throws."
     }
   ]
 }
