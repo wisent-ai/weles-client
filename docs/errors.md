@@ -33,7 +33,7 @@ under it (`tasks` → `<endpoint>/tasks`).
 | `origin-denied` | `The workflow origin is not in the client allowlist` | normalized origin not in `allowedOrigins`; `details.origin` |
 | `action-denied` | `The workflow action is not in the client allowlist` | action not in `allowedActions`; `details.action` |
 | `plaintext-secret-denied` | `Send a credential reference instead of sensitive plaintext` | any `input` key (recursively) matching `/password|secret|token|cookie|authorization|proxy.?auth/i`; `details.path` names the offending key path. The single exemption is `/^resume_?token$/i` — Weles' own approval continuation handle |
-| `invalid-input` | `justification must be a non-empty string` | missing justification on `submit` (same shape for `taskId` on `get`/`cancel`, `reason` on `cancel`, `idempotencyKey`, `credentialRefs` items) |
+| `invalid-input` | `justification must be a non-empty string` | missing justification on `submit` (same shape for `taskId` on `get`/`cancel`, `reason` on `cancel`, `idempotencyKey`, `credentialRefs` items); a non-array `credentialRefs` is `credentialRefs must be a string array` |
 
 Captured live (loopback demo,
 [examples](examples/submit-loopback-demo.mjs)):
@@ -69,6 +69,7 @@ In check order — the first failure wins:
 | `unknown-receipt-key` | `No trusted public key matches the receipt key identifier` | `keyId` absent from the caller's key map; `details.keyId`. The receipt never supplies its own key |
 | `invalid-receipt-signature` | `The receipt signature is invalid` | `crypto.verify` fails over the exact `signedPayload` bytes; `details.keyId` |
 | `invalid-receipt-payload` | `The signed receipt payload is not JSON` | `signedPayload` does not parse |
+| `invalid-input` | `receipt claims must be an object` | `signedPayload` parsed to a non-object (e.g. a bare number) |
 | `receipt-claim-mismatch` | `A displayed receipt field differs from the signed claim` | any of `taskId`, `organizationId`, `origin`, `action`, `outcome`, `evidenceDigest` differs between the receipt document and the signed claims; `details.field` |
 
 All six captured live against a synthetic receipt
@@ -98,12 +99,15 @@ invalid-input: "receipt.signature must be a non-empty string"
 
 ## Credential bridges (`bin/`)
 
-The bridges do not use `WelesClientError`. They settle every request to one
+The bridges do not use `WelesClientError` (full contract:
+[skarbiec-bridges](skarbiec-bridges.md)). They settle every request to one
 line of JSON on stdout with a closed `status` set — `operation_plan`,
 `operation_queued`, `operation_completed`, `needs_configuration`,
 `needs_human_approval`, `unsupported_operation`, `unsupported_secret`,
 `operation_failed` — and exit 0; a malformed request or a broken environment
-is a thrown `Error` and exit 1. Highlights:
+is a thrown `Error` and exit 1.
+
+### Settled refusals (stdout, exit 0)
 
 - **Unresolved endpoint** (`weles-skarbiec-acquire.mjs`): the admission
   endpoint resolves only from the Stado forward file
@@ -118,36 +122,81 @@ is a thrown `Error` and exit 1. Highlights:
   {"status":"needs_configuration","operation":"acquire","provider":"semantic_scholar","vaultItemId":"weles-semantic-scholar-api","message":"Weles admission endpoint is unresolved: <dir>/weles-admission.local does not exist","code":"WELES_ENDPOINT_UNRESOLVED","phase":"admission"}
   ```
 
+  The wrapped `<reason>` in that message is the forward-validation error:
+  `<path> does not exist`, `<path> is not a regular file`, `<path> is not
+  owned by this user`, `<path> is group- or world-writable`, `<path> must
+  contain exactly one forward URL line`, `<path> contains no forward URL`,
+  `<path> does not contain an absolute URL`, `<path> must use HTTPS or HTTP
+  on a loopback host`, `<path> must not carry credentials, a query, or a
+  fragment`, `HOME is required to locate the Stado forwards directory`, or
+  `a POSIX user id is required to validate the Stado forward`.
 - **Unknown contract**: a `credential_id`/`provider`/`consumer` triple with
   no exact bridge contract settles as `needs_configuration` with
   `No exact Weles credential contract for <credential_id>/<provider>/<consumer>`;
   an operation outside the contract's allowed set settles as
-  `unsupported_operation`.
-- **Request validation** (thrown, exit 1): `unsupported credential request
-  version`, `invalid credential request id` (must be 64 hex), `invalid
-  credential operation`, `invalid credential baseline revision`, `invalid
-  credential request state` (`status` must be `pending`, `dry_run` boolean),
-  `only resume mode may carry an approval`, `submit mode must not carry an
-  action log id`, `status mode requires an exact action log id`, `resume mode
-  requires an exact approval id and resume token`, `credential request
-  contains unknown fields`, `credential request exceeded size limit` (64 KiB).
-- **Response discipline**: `Weles credential-operation response identity
-  mismatch`, `Weles task status response identity mismatch`, `Weles task
-  status response provenance mismatch`, `Weles credential-operation receipt
-  identity mismatch`, `Weles returned an unsupported task status` — a
-  response that does not prove it is about this exact request is an error,
-  not a result. An `operation_failed` without a well-formed provider effect
-  reports `providerEffect: "unknown"`, which is never retried automatically.
-- **Admission variant** (`weles-skarbiec-acquire-admission.mjs`): posts the
-  same wire to `POST /v1/echo/secrets/acquire` on `WELES_ADMISSION_ORIGIN`
-  (default `http://127.0.0.1:8794`; HTTPS anywhere, HTTP only on loopback);
-  `WELES_TOKEN` is the optional bearer, `WELES_ADMISSION_TIMEOUT_MS` the
-  request timeout (default 30000). `mode: "status"` settles immediately as
-  `operation_queued` with `status settles through the Skarbiec vault
-  lifecycle record` — the vault, not admission, is the status authority. A
-  non-2xx admission answer settles as `needs_configuration` with `admission
-  rejected the operation (HTTP <status>)`; an unknown settled status is the
-  thrown `admission returned an unsupported credential-operation status`.
+  `unsupported_operation` with `<operation> is not allowed for
+  <credential_id>/<provider>`.
+- **Identity contract**: a directory block that does not match the sealed
+  Entra contract, or any directory block under another provider, settles as
+  `needs_configuration` with `code: "ENTRA_IDENTITY_CONTRACT_MISMATCH"`
+  (`Entra account identity does not match the exact bridge contract for
+  <credential_id>` / `A directory identity is only accepted for provider
+  microsoft_entra, not <provider>`); a Microsoft operation without an
+  account settles as `Microsoft credential operations require --account
+  <email>`.
+- **Admission variant rejection** (`weles-skarbiec-acquire-admission.mjs`):
+  a non-2xx admission answer settles as `needs_configuration` with
+  `admission rejected the operation (HTTP <status>): <error or first 160
+  bytes of the body>`.
+
+### Thrown request validation (exit 1, both bridges)
+
+`credential request exceeded size limit` (64 KiB), `credential request must
+be an object`, `credential request contains unknown fields`, `unsupported
+credential request version`, `invalid credential request id` (must be 64
+hex), `invalid credential item id`, `invalid credential provider`, `invalid
+credential field`, `invalid credential consumer`, `invalid credential
+operation`, `invalid credential account email`, `invalid credential request
+state` (`status` must be `pending`, `dry_run` boolean), `invalid credential
+bridge mode`. The admission bridge appends the offending value to its
+version, operation, and mode errors (`unsupported credential request
+version: <value>`, `invalid credential operation: <value>`, `invalid
+credential bridge mode: <value>`).
+
+Acquire-bridge only: `invalid credential directory block`, `invalid
+credential baseline revision`, `invalid credential purpose`, `only resume
+mode may carry an approval`, `submit mode must not carry an action log id`,
+`status mode requires an exact action log id`, `resume mode requires an
+exact approval id and resume token`, `resume mode carries either no action
+log id or an exact one`, `resume mode must not be a dry run`, and the
+environment gates `WELES_TOKEN is required` / `WISENT_ORGANIZATION_ID is
+required` (template `<name> is required`).
+
+Admission-bridge only: `WELES_ADMISSION_ORIGIN is not an absolute URL:
+<value>`, `WELES_ADMISSION_ORIGIN must use HTTPS, or HTTP on a loopback
+host`, `WELES_ADMISSION_ORIGIN must not contain credentials, query, or
+fragment`.
+
+### Thrown response discipline (exit 1)
+
+Acquire bridge: `Weles response is missing the credential-operation result`,
+`Weles credential-operation response identity mismatch`, `Weles task status
+response is invalid`, `Weles task status response identity mismatch`, `Weles
+task status response provenance mismatch`, `Weles credential-operation
+receipt identity mismatch`, `Weles returned an unsupported task status`,
+`Weles returned an unsupported credential-operation status`, `Weles
+credential-operation response does not match dry-run mode`, `Weles completed
+a credential operation that was submitted as a dry run`, `queued Weles
+credential operation is missing its action log id` — a response that does
+not prove it is about this exact request is an error, not a result. An
+`operation_failed` without a well-formed provider effect reports
+`providerEffect: "unknown"`, which is never retried automatically.
+
+Admission bridge: `admission returned non-JSON (HTTP <status>): <first 200
+bytes>`, `admission returned an unsupported credential-operation status:
+<status or (empty)>`. `mode: "status"` settles immediately as
+`operation_queued` with `status settles through the Skarbiec vault
+lifecycle record` — the vault, not admission, is the status authority.
 
 Both bridges accept no credential material on stdin and return none on
 stdout; request buffers are zeroed after parsing (`bytes.fill(0)`).
@@ -155,4 +204,5 @@ stdout; request buffers are zeroed after parsing (`bytes.fill(0)`).
 Environment read by the bridges: `WELES_TOKEN` and `WISENT_ORGANIZATION_ID`
 (required by `weles-skarbiec-acquire.mjs` before submitting), `HOME` /
 `STADO_FORWARDS_DIR` (forward resolution), `WELES_ADMISSION_ORIGIN` /
-`WELES_ADMISSION_TIMEOUT_MS` (admission variant only).
+`WELES_ADMISSION_TIMEOUT_MS` (admission variant only, timeout default
+30000 ms).

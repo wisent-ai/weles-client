@@ -2,6 +2,24 @@
   "schemaVersion": 1,
   "documents": [
     {
+      "output": "docs/what-is-weles-client.md",
+      "sources": [
+        "src/index.mjs",
+        "bin",
+        "README.md"
+      ],
+      "instruction": "The what-is page must define weles-client as the public verifier and safe submission client that fails closed, state the boundaries (no receipt issuance, no credential custody, no trust decision, no logging or retries), and quote the client-side refusal messages exactly as src/index.mjs throws them."
+    },
+    {
+      "output": "docs/skarbiec-bridges.md",
+      "sources": [
+        "bin/weles-skarbiec-acquire.mjs",
+        "bin/weles-skarbiec-acquire-admission.mjs",
+        "test/weles-skarbiec-acquire.test.mjs"
+      ],
+      "instruction": "The bridges page must match bin/ exactly: the skarbiec.credential-operation.v3 wire, the closed settled-status set, the no-secrets stdin/stdout contract with buffer zeroing, forward-file and admission-origin endpoint resolution, the { ok, data } envelope unwrapping, and the status-mode split between the two bridges."
+    },
+    {
       "output": "docs/verifier.md",
       "sources": [
         "src/index.mjs",

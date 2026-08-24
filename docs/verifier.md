@@ -33,16 +33,17 @@ containing it. First-use receipts additionally carry signed `subject`,
 
 `keys` is a caller-owned map (plain object or `Map`) of key ID to PEM public
 key. The checks run in order — the first failure throws, and each failure has
-one stable code:
+one stable code and one exact message:
 
-| Step | Check | Failure code |
-|---|---|---|
-| 1 | Receipt is an object with non-empty `schema`, `keyId`, `signature`, `signedPayload` | `invalid-input` |
-| 2 | `schema` is exactly `weles.receipt.current` | `unsupported-receipt` |
-| 3 | `keyId` resolves in the caller's key map | `unknown-receipt-key` |
-| 4 | Signature verifies over the exact `signedPayload` bytes (`node:crypto` `verify` with algorithm `null` — the key type, e.g. Ed25519, decides) | `invalid-receipt-signature` |
-| 5 | `signedPayload` parses as a JSON object | `invalid-receipt-payload` |
-| 6 | Every displayed field equals its signed claim (`taskId`, `organizationId`, `origin`, `action`, `outcome`, `evidenceDigest`) | `receipt-claim-mismatch` |
+| Step | Check | Failure code | Exact message |
+|---|---|---|---|
+| 1 | Receipt is an object with non-empty `schema`, `keyId`, `signature`, `signedPayload` | `invalid-input` | `receipt must be an object` / `receipt.schema must be a non-empty string` (same shape for `receipt.keyId`, `receipt.signature`, `receipt.signedPayload`) |
+| 2 | `schema` is exactly `weles.receipt.current` | `unsupported-receipt` | `The receipt schema is not supported` |
+| 3 | `keyId` resolves in the caller's key map | `unknown-receipt-key` | `No trusted public key matches the receipt key identifier` |
+| 4 | Signature verifies over the exact `signedPayload` bytes (`node:crypto` `verify` with algorithm `null` — the key type, e.g. Ed25519, decides) | `invalid-receipt-signature` | `The receipt signature is invalid` |
+| 5 | `signedPayload` parses as JSON | `invalid-receipt-payload` | `The signed receipt payload is not JSON` |
+| 6 | The parsed claims are an object | `invalid-input` | `receipt claims must be an object` |
+| 7 | Every displayed field equals its signed claim (`taskId`, `organizationId`, `origin`, `action`, `outcome`, `evidenceDigest`) | `receipt-claim-mismatch` | `A displayed receipt field differs from the signed claim` |
 
 On success it returns the frozen signed claims plus the `keyId` that
 verified them. Captured against a synthetic receipt
@@ -136,8 +137,9 @@ never an environment-variable fallback), zeroes request buffers after
 parsing, and emits only sanitized, shape-checked diagnostics — an
 `operation_failed` without a well-formed provider effect is reported as
 `providerEffect: unknown`, which is never retried automatically. The full
-bridge contract is in the [README](../README.md); its status vocabulary and
-exact strings are in [errors](errors.md#credential-bridges-bin).
+bridge contract is in [skarbiec-bridges](skarbiec-bridges.md); its status
+vocabulary and exact strings are in
+[errors](errors.md#credential-bridges-bin).
 
 ## Verifying a retained receipt offline
 

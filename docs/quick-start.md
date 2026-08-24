@@ -1,9 +1,10 @@
 # Quick start
 
 How do you go from a checkout to one verified receipt? Entirely offline: the
-verifier needs receipt bytes and a trusted key map, nothing else. Every
-command below was executed as written (Node v22, macOS); the output blocks are
-pasted from those runs.
+verifier needs receipt bytes and a trusted key map, nothing else
+([what-is-weles-client](what-is-weles-client.md) explains why that is the
+whole trust model). Every command below was executed as written (Node v22,
+macOS); the output blocks are pasted from those runs.
 
 ## Get the client
 
