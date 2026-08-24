@@ -597,6 +597,9 @@ Store the signed payload, signature, key ID, verified claims, and key-set versio
 together. Obtain keys through a separately authenticated channel; never accept a
 verification key from the receipt it is supposed to verify.
 
+The step-by-step check order, every fail-closed gate, and the offline
+verification path are documented in [docs/verifier.md](docs/verifier.md).
+
 ## Errors and redaction
 
 Every validation, transport, response, and receipt failure throws
