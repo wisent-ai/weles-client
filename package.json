@@ -14,8 +14,7 @@
     "bin",
     "src",
     "LICENSE",
-    "README.md",
-    "SECURITY.md"
+    "README.md"
   ],
   "repository": {
     "type": "git",
