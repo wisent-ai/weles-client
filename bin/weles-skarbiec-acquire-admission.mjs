@@ -7,8 +7,8 @@
 //   WELES_ADMISSION_ORIGIN   absolute http(s) origin of the admission server
 //                            (default http://127.0.0.1:8794); https anywhere,
 //                            http only on loopback
-//   WELES_TOKEN              bearer presented to admission; optional when the
-//                            server runs unauthenticated on loopback
+//   WELES_TOKEN              required bearer presented to admission
+//   WISENT_ORGANIZATION_ID   required organization UUID presented to admission
 import { createHash } from 'node:crypto';
 
 const ZERO = ''.length;
@@ -23,6 +23,7 @@ const MAX_REQUEST_BYTES = Math.pow(TWO, 'xxxxxxxxxxxxxxxx'.length);
 const REQUEST_VERSION = 'skarbiec.credential-operation.v3';
 const DEFAULT_ORIGIN = 'http://127.0.0.1:8794';
 const ACQUIRE_PATH = '/v1/echo/secrets/acquire';
+const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/;
 
 function exactName(value, maximum) {
   return typeof value === 'string'
@@ -132,9 +133,18 @@ if (origin.username || origin.password || origin.search || origin.hash) {
   throw new Error('WELES_ADMISSION_ORIGIN must not contain credentials, query, or fragment');
 }
 
-const bearer = process.env.WELES_TOKEN?.trim() ?? '';
-const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
-if (bearer) headers.Authorization = `Bearer ${bearer}`;
+const bearer = process.env.WELES_TOKEN?.trim();
+if (!bearer) throw new Error('WELES_TOKEN is required');
+const organizationId = (process.env.WISENT_ORGANIZATION_ID ?? '').trim().toLowerCase();
+if (!UUID_PATTERN.test(organizationId)) {
+  throw new Error('WISENT_ORGANIZATION_ID must be a UUID');
+}
+const headers = {
+  Authorization: `Bearer ${bearer}`,
+  'X-Wisent-Organization-ID': organizationId,
+  'Content-Type': 'application/json',
+  Accept: 'application/json',
+};
 
 const response = await fetch(new URL(ACQUIRE_PATH, origin), {
   method: 'POST',

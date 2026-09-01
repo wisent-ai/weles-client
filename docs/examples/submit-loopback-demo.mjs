@@ -15,6 +15,7 @@ import { WelesClient, WelesClientError } from '../../src/index.mjs';
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const receiptKeys = { 'docs-demo-key': publicKey.export({ type: 'spki', format: 'pem' }) };
 const tasks = new Map();
+const organizationId = randomUUID();
 const receiptFor = (task) => {
   const claims = {
     taskId: task.taskId, organizationId: task.organizationId, origin: task.origin,
@@ -31,10 +32,17 @@ const server = createServer((req, res) => {
   req.on('data', (chunk) => { body += chunk; });
   req.on('end', () => {
     res.setHeader('content-type', 'application/json');
+    if (req.headers.authorization !== 'Bearer docs-demo-org-token'
+        || req.headers['x-wisent-organization-id'] !== organizationId) {
+      res.statusCode = 401;
+      res.end(JSON.stringify({ error: 'bearer and organization header must match' }));
+      return;
+    }
     if (req.method === 'POST' && req.url === '/v1/tasks') {
       const request = JSON.parse(body);
       const task = { schema: 'weles.task-status.current', taskId: randomUUID(), status: 'queued',
-                     organizationId: request.organizationId, origin: request.origin, action: request.action };
+                     organizationId: req.headers['x-wisent-organization-id'],
+                     origin: request.origin, action: request.action };
       tasks.set(task.taskId, task);
       res.end(JSON.stringify(task));
       return;
@@ -55,7 +63,7 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const client = new WelesClient({
   endpoint: `http://127.0.0.1:${server.address().port}/v1/`,
   bearer: 'docs-demo-org-token',
-  organizationId: randomUUID(),
+  organizationId,
   allowedOrigins: ['https://example.com'],
   allowedActions: ['example_check'],
   receiptKeys,

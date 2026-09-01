@@ -56,9 +56,11 @@ export WISENT_ORGANIZATION_ID=<organization-uuid>
 export WELES_TOKEN=<organization-scoped-token>
 ```
 
-The token must belong to the same organization ID and carry only the required
-task create, read, and cancel scopes. The hosted API rejects an organization
-mismatch.
+Every organization-scoped request carries both values in client-controlled
+headers: `Authorization: Bearer <token>` and the exact
+`X-Wisent-Organization-ID: <organization-uuid>`. The organization ID is not a
+tenant selector in task or cancellation payloads. The service verifies the
+header against the bearer and rejects any mismatch.
 
 The admission endpoint is no longer an environment variable. `WELES_URL` is
 removed: the `weles-skarbiec-acquire` bridge resolves the API base only from the
@@ -342,8 +344,8 @@ automation.
 [Receipt verification](#receipt-verification) ·
 [Canonical repository](https://github.com/wisent-ai/weles-client)
 
-Current release status: public development source. The manifest has no version or
-publish script until an immutable package release is approved. Source
+Current release status: public development source at manifest version `0.2.0`.
+No immutable package release or tag is promised until release approval. Source
 availability does not promise a hosted Weles endpoint, approved trajectory,
 target support, evidence retention, or SLA.
 
@@ -371,6 +373,8 @@ Weles Client serves:
 
 - HTTPS endpoints, with plaintext HTTP allowed only on a loopback host
   (`127.0.0.1`, `localhost`, `::1`);
+- one client-controlled `Authorization: Bearer <token>` header and one exact
+  `X-Wisent-Organization-ID: <organization-uuid>` header on every request;
 - non-empty exact origin and action allowlists;
 - rejection of request input keys matching password, secret, token, cookie,
   authorization, or proxy-auth patterns, with the single exception of the
@@ -427,8 +431,9 @@ Weles Client serves:
 - **Initial state:** exact HTTPS endpoint, organization, origin, action, trusted
   receipt keys, non-secret input, credential references, and justification are
   explicit.
-- **Outcome:** the client sends `weles.task.current` with an idempotency key and
-  verifies any receipt returned in the response.
+- **Outcome:** the client sends `weles.task.current` without a tenant selector,
+  authenticates it with the bearer and organization headers, and verifies any
+  receipt returned in the response.
 - **Boundary:** acceptance is not completion; the action still depends on
   executor policy, target state, authorization, and human approval where needed.
 
@@ -461,7 +466,7 @@ application policy
   ├─ non-secret input + opaque credential refs
   ├─ justification
   └─ idempotency key
-              │ HTTPS + bearer
+              │ HTTPS + bearer + organization header
               ▼
       separately operated Weles service
               │ response + optional signed receipt
@@ -526,6 +531,14 @@ const client = new WelesClient({
 });
 ```
 
+`organizationId` must be a hyphenated UUID. The constructor trims it and
+normalizes hexadecimal letters to lowercase before sending the organization
+header.
+
+`bearer` must be a non-empty token with no ASCII whitespace or control
+characters. The client sends it unchanged as exactly `Authorization: Bearer
+<token>`.
+
 Do not put the bearer or private signing key in frontend code. Trusted receipt
 keys are public verification material and still require authenticated
 distribution and rotation.
@@ -546,17 +559,29 @@ const accepted = await client.submit({
 });
 ```
 
-The client sends:
+Every submit, status read, and cancellation request carries exactly one
+`Authorization: Bearer <token>` header and one
+`X-Wisent-Organization-ID: <organization-uuid>` header. The client also controls
+`Content-Type` and `Accept`; custom headers cannot replace any of these four.
+
+The submission payload contains:
 
 - schema `weles.task.current`;
-- `organizationId`, normalized origin, exact action, and non-secret input;
+- normalized origin, exact action, and non-secret input;
 - opaque `credentialRefs` and evidence policy;
-- human-readable justification;
-- caller-controlled `Idempotency-Key` and bearer headers.
+- human-readable justification.
+
+The organization is selected only by the verified request header, never by the
+task payload. The caller controls the `Idempotency-Key`.
 
 Signed receipt claims bind task, organization, origin, action, outcome, and
 evidence digest. Consumers choose and rotate the trusted key set; an unknown key
 fails closed.
+
+For receipts returned by client calls, signature verification is only the first
+step. Every receipt must match the configured organization exactly; submit also
+binds the submitted origin and action, while status reads and cancellation bind
+the requested task ID. Any mismatch fails closed.
 
 If no key is supplied, the client generates a UUID. Persist your own operation ID
 when reconciliation across process restarts matters.
@@ -570,6 +595,9 @@ const cancelled = await client.cancel(taskId, {
   signal: abortController.signal,
 });
 ```
+
+The cancellation payload contains only schema `weles.cancellation.current` and
+the reason. Its organization context comes from the same verified header.
 
 Transport ambiguity is returned as `transport-failed`; the library does not
 retry. Reconcile with the service using an approved task-status channel before
@@ -592,6 +620,11 @@ The supported receipt schema is `weles.receipt.current`. Verification binds:
 - `outcome`;
 - `evidenceDigest`;
 - trusted `keyId`.
+
+Standalone `verifyReceipt` proves the signature and equality of displayed fields
+with signed claims. It does not know a request context. `WelesClient` adds the
+organization, origin/action, and task-ID bindings described above before
+returning a response.
 
 Store the signed payload, signature, key ID, verified claims, and key-set version
 together. Obtain keys through a separately authenticated channel; never accept a
@@ -617,8 +650,9 @@ retention, and safe error presentation.
   trusted receipt keys, and optional Fetch implementation.
 - **State:** no client database; callers retain idempotency keys, task IDs,
   receipts, trusted-key versions, and reconciliation state.
-- **Credentials:** service bearer stays in the calling backend; workflow input
-  contains opaque references only.
+- **Credentials:** the service bearer and organization ID stay in the calling
+  backend and travel in client-controlled headers; workflow input contains
+  opaque references only.
 - **Observability:** stable error code, HTTP status where available, redacted
   response details, service response, and verified receipt.
 - **Recovery:** no hidden retry. On ambiguous transport failure, query service
@@ -628,9 +662,10 @@ retention, and safe error presentation.
 
 ## Project status and support
 
-- **Maturity:** public development source without a publishable manifest version.
-- **Public contract:** safe task/cancellation request construction, local
-  validation, redaction, and signed-receipt verification.
+- **Maturity:** manifest version `0.2.0` public development source; no immutable
+  package release or tag is promised.
+- **Public contract:** safe organization-authenticated task/cancellation request
+  construction, local validation, redaction, and signed-receipt verification.
 - **Private service:** browser execution, service-specific workflows, scheduling,
   evidence operation, stealth research, and support.
 - **Issues:** [`wisent-ai/weles-client`](https://github.com/wisent-ai/weles-client/issues).

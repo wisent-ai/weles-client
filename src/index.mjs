@@ -8,6 +8,14 @@ const RESUMPTION_KEY = /^resume_?token$/i;
 const REDACTED = '[REDACTED]';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const LOOPBACK_HOSTS = Object.freeze(['127.0.0.1', 'localhost', '[::1]']);
+const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/;
+const ASCII_WHITESPACE_OR_CONTROL = /[\x00-\x20\x7f]/;
+const CONTROLLED_HEADERS = new Set([
+  'authorization',
+  'x-wisent-organization-id',
+  'content-type',
+  'accept',
+]);
 
 async function boundedResponseText(response) {
   const declaredLength = Number(response.headers?.get?.('content-length'));
@@ -51,8 +59,8 @@ export class WelesClient {
   constructor(options) {
     requireObject(options, 'options');
     this.endpoint = secureBaseUrl(options.endpoint);
-    this.bearer = requireText(options.bearer, 'bearer');
-    this.organizationId = requireText(options.organizationId, 'organizationId');
+    this.bearer = requireBearer(options.bearer);
+    this.organizationId = requireUuid(options.organizationId, 'organizationId');
     this.allowedOrigins = new Set(requireTextArray(options.allowedOrigins, 'allowedOrigins').map(normalizeOrigin));
     this.allowedActions = new Set(requireTextArray(options.allowedActions, 'allowedActions'));
     this.receiptKeys = new Map(Object.entries(options.receiptKeys ?? {}));
@@ -76,7 +84,6 @@ export class WelesClient {
     const idempotencyKey = requireText(options.idempotencyKey ?? randomUUID(), 'idempotencyKey');
     const body = {
       schema: 'weles.task.current',
-      organizationId: this.organizationId,
       origin,
       action,
       input: request.input ?? {},
@@ -91,7 +98,7 @@ export class WelesClient {
       signal: options.signal,
     });
     if (response.receipt) {
-      verifyReceipt(response.receipt, this.receiptKeys);
+      this.#verifyReceipt(response.receipt, { origin, action });
     }
     return response;
   }
@@ -104,13 +111,12 @@ export class WelesClient {
       headers: { 'Idempotency-Key': idempotencyKey },
       body: {
         schema: 'weles.cancellation.current',
-        organizationId: this.organizationId,
         reason: requireText(options.reason, 'reason'),
       },
       signal: options.signal,
     });
     if (response.receipt) {
-      verifyReceipt(response.receipt, this.receiptKeys);
+      this.#verifyReceipt(response.receipt, { taskId: id });
     }
     return response;
   }
@@ -122,21 +128,62 @@ export class WelesClient {
       signal: options.signal,
     });
     if (response.receipt) {
-      verifyReceipt(response.receipt, this.receiptKeys);
+      this.#verifyReceipt(response.receipt, { taskId: id });
     }
     return response;
   }
 
+  #verifyReceipt(receipt, expected = {}) {
+    const claims = verifyReceipt(receipt, this.receiptKeys);
+    if (claims.organizationId !== this.organizationId) {
+      throw new WelesClientError(
+        'receipt-organization-mismatch',
+        'The signed receipt organization does not match the client organization',
+      );
+    }
+    if (expected.origin !== undefined && claims.origin !== expected.origin) {
+      throw new WelesClientError(
+        'receipt-origin-mismatch',
+        'The signed receipt origin does not match the submitted origin',
+      );
+    }
+    if (expected.action !== undefined && claims.action !== expected.action) {
+      throw new WelesClientError(
+        'receipt-action-mismatch',
+        'The signed receipt action does not match the submitted action',
+      );
+    }
+    if (expected.taskId !== undefined && claims.taskId !== expected.taskId) {
+      throw new WelesClientError(
+        'receipt-task-mismatch',
+        'The signed receipt task does not match the requested task',
+      );
+    }
+  }
+
   async request(path, options) {
+    const customHeaders = options.headers ?? {};
+    requireObject(customHeaders, 'headers');
+    const controlledHeader = Object.keys(customHeaders)
+      .find((name) => CONTROLLED_HEADERS.has(name.toLowerCase()));
+    if (controlledHeader) {
+      throw new WelesClientError(
+        'invalid-input',
+        `The Weles client controls the ${controlledHeader} header`,
+        { header: controlledHeader },
+      );
+    }
+
     let response;
     try {
       response = await this.fetch(new URL(path, this.endpoint), {
         method: options.method,
         headers: {
+          ...customHeaders,
           Authorization: `Bearer ${this.bearer}`,
+          'X-Wisent-Organization-ID': this.organizationId,
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          ...options.headers,
         },
         body: JSON.stringify(options.body),
         signal: options.signal,
@@ -277,6 +324,24 @@ function requireText(value, name) {
     throw new WelesClientError('invalid-input', `${name} must be a non-empty string`);
   }
   return value;
+}
+
+function requireBearer(value) {
+  if (typeof value !== 'string' || !value || ASCII_WHITESPACE_OR_CONTROL.test(value)) {
+    throw new WelesClientError(
+      'invalid-input',
+      'bearer must be a non-empty token without ASCII whitespace or control characters',
+    );
+  }
+  return value;
+}
+
+function requireUuid(value, name) {
+  const normalized = requireText(value, name).trim().toLowerCase();
+  if (!UUID_PATTERN.test(normalized)) {
+    throw new WelesClientError('invalid-input', `${name} must be a UUID`);
+  }
+  return normalized;
 }
 
 function requireTextArray(value, name) {
