@@ -16,7 +16,7 @@ validateRequest(request);
 let endpoint;
 try {
   const base = resolveWelesEndpoint();
-  endpoint = new URL('credential-operations', `${base.replace(/\/$/, '')}/`);
+  endpoint = new URL('/api/v1/credential-operations', base);
 } catch (error) {
   await emit(credentialFailure(request, 'WELES_ENDPOINT_UNRESOLVED', error.message));
   process.exit(0);

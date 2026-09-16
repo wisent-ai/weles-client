@@ -56,3 +56,39 @@ test('status without a declared authority refuses instead of inventing a queued 
   assert.equal(response.providerEffect, 'none');
   assert.equal(response.actionLogId, request.action_log_id);
 });
+
+test('deployed admission resolves a Stado origin to the credential API route', { skip: process.env.WELES_LIVE_CREDENTIAL_TEST !== '1' }, () => {
+  const build = join(root, '.wisent-output', 'credential-bridge-tests');
+  mkdirSync(build, { recursive: true });
+  const evidence = mkdtempSync(join(build, 'live-route-'));
+  const requestId = createHash('sha256').update(evidence).digest('hex');
+  const request = {
+    version: 'skarbiec.credential-operation.v3', request_id: requestId,
+    mode: 'status', action_log_id: `credential-${requestId}`,
+    credential_id: 'winston', operation: 'acquire', provider: 'winston',
+    consumer: 'winston-writer', purpose: 'Verify real credential status routing without starting acquisition',
+    account_email: null, signup_origin: 'https://dev.gowinston.ai', directory: null,
+    baseline_revision: 0, field: 'api_key', status: 'pending',
+    created_at: new Date().toISOString(), dry_run: false,
+    approval_id: null, resume_token: null,
+  };
+  const argv = [join(root, bridge)];
+  const result = spawnSync(process.execPath, argv, {
+    cwd: root, input: JSON.stringify(request), encoding: 'utf8', env: process.env,
+  });
+  writeFileSync(join(evidence, 'request.json'), JSON.stringify(request, null, 2));
+  writeFileSync(join(evidence, 'stdout.txt'), result.stdout);
+  writeFileSync(join(evidence, 'stderr.txt'), result.stderr);
+  writeFileSync(join(evidence, 'manifest.json'), JSON.stringify({
+    revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+    sources: Object.fromEntries(sources.map((path) => [path,
+      createHash('sha256').update(readFileSync(join(root, path))).digest('hex')])),
+    executable: process.execPath, argv, exit_status: result.status,
+    claim: 'Real authenticated status refusal for an unsubmitted request; no provider interaction.',
+  }, null, 2));
+  console.log(`Live credential route evidence: ${evidence}`);
+  assert.equal(result.status, 0, result.stderr);
+  const response = JSON.parse(readFileSync(join(evidence, 'stdout.txt'), 'utf8'));
+  assert.equal(response.code, 'WELES_CREDENTIAL_REQUEST_NOT_FOUND');
+  assert.equal(response.actionLogId, request.action_log_id);
+});
