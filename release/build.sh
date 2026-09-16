@@ -21,4 +21,8 @@ cp "$work/$archive" "$dist/weles-client.tgz"
   cd "$dist"
   shasum -a 256 weles-client.tgz > weles-client.tgz.sha256
 )
-git -C "$WISENT_SOURCE_DIR" rev-parse HEAD > "$dist/SOURCE_REVISION"
+if [[ -n "${WISENT_SOURCE_COMMIT:-}" ]]; then
+  printf '%s\n' "$WISENT_SOURCE_COMMIT" > "$dist/SOURCE_REVISION"
+else
+  git -C "$WISENT_SOURCE_DIR" rev-parse HEAD > "$dist/SOURCE_REVISION"
+fi

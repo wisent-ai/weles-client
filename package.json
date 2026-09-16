@@ -1,11 +1,16 @@
 {
   "name": "@wisent-ai/weles-client",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Safe client and signed receipt verifier for authorized Weles workflows",
   "type": "module",
-  "exports": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./credential/input": "./src/credential/input.mjs",
+    "./credential/response": "./src/credential/response.mjs"
+  },
   "bin": {
-    "weles-skarbiec-acquire": "./bin/weles-skarbiec-acquire.mjs"
+    "weles-skarbiec-acquire": "./bin/weles-skarbiec-acquire.mjs",
+    "weles-skarbiec-acquire-admission": "./bin/weles-skarbiec-acquire-admission.mjs"
   },
   "scripts": {
     "test": "node --test"
