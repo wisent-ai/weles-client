@@ -10,6 +10,9 @@ import urllib.request
 
 OWNER = "wisent-ai"
 REPOSITORY = "weles-client"
+# A full git commit id is forty hex characters; 404 from the API means the tag or release is not there yet.
+GIT_REVISION_LENGTH = 40
+HTTP_NOT_FOUND = 404
 
 
 def required(name: str) -> str:
@@ -46,7 +49,7 @@ def main() -> None:
             raise RuntimeError("canonical Stado archive has no SOURCE_REVISION")
         source = bundle.extractfile(member)
         revision = source.read().decode("ascii").strip() if source else ""
-    if len(revision) != 40 or any(character not in "0123456789abcdef" for character in revision):
+    if len(revision) != GIT_REVISION_LENGTH or any(character not in "0123456789abcdef" for character in revision):
         raise RuntimeError("canonical Stado archive contains an invalid source revision")
 
     tag = f"v{version}"
@@ -56,13 +59,13 @@ def main() -> None:
         if ref["object"]["sha"] != revision:
             raise RuntimeError(f"existing {tag} does not identify canonical source {revision}")
     except urllib.error.HTTPError as error:
-        if error.code != 404:
+        if error.code != HTTP_NOT_FOUND:
             raise
         api("/git/refs", token, "POST", json.dumps({"ref": f"refs/tags/{tag}", "sha": revision}).encode())
     try:
         release = api(f"/releases/tags/{encoded_tag}", token)
     except urllib.error.HTTPError as error:
-        if error.code != 404:
+        if error.code != HTTP_NOT_FOUND:
             raise
         release = api("/releases", token, "POST", json.dumps({"tag_name": tag, "name": f"Weles client {version}", "body": f"Optional mirror of {release_uri}", "draft": False, "prerelease": False}).encode())
 
