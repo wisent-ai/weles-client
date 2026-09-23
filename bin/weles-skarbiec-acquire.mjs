@@ -41,10 +41,16 @@ function unsupported(request, status, message, code, phase) {
 const request = await readRequest();
 validateRequest(request);
 const contract = contractFor(request);
+// A Microsoft password lifecycle names its exact writer consumer for rotate and
+// verify and its exact reader consumer for adopt: Skarbiec stages the adopt
+// candidate against the reader consumer, so only that consumer may read it back.
+const microsoftConsumer = request.provider === 'microsoft'
+    && MICROSOFT_CREDENTIAL_ID.test(request.credential_id)
+    && [`${request.credential_id}-writer`, `${request.credential_id}-reader-password`].includes(request.consumer);
 if (!contract
     || contract.provider !== request.provider
     || contract.field !== request.field
-    || contract.consumer !== request.consumer) {
+    || (contract.consumer !== request.consumer && !microsoftConsumer)) {
   await emit(unsupported(
     request,
     'needs_configuration',
@@ -67,6 +73,19 @@ if (!contract.operations.includes(request.operation)) {
     request,
     'unsupported_operation',
     `${request.operation} is not allowed for ${request.credential_id}/${request.provider}`,
+  ));
+  process.exit(ZERO);
+}
+// Only a derived generic contract has a caller-declared site. A named contract
+// owns its origin, so a signup origin aimed at one of those items is refused
+// instead of redirecting a reviewed flow to another host.
+if (request.signup_origin && contract.signupOrigin === undefined) {
+  await emit(unsupported(
+    request,
+    'needs_configuration',
+    `A signup origin is only accepted for a generic provider, not ${request.credential_id}/${request.provider}`,
+    'SIGNUP_ORIGIN_NOT_ACCEPTED',
+    'admission',
   ));
   process.exit(ZERO);
 }
@@ -119,10 +138,11 @@ try {
   process.exit(ZERO);
 }
 
+const identity = callerIdentity(endpoint);
 const client = new WelesClient({
   endpoint,
-  bearer: requiredEnvironment('WELES_TOKEN'),
-  organizationId: requiredEnvironment('WISENT_ORGANIZATION_ID'),
+  bearer: identity.bearer,
+  organizationId: identity.organizationId,
   allowedOrigins: [contract.origin],
   allowedActions: [ACTION],
 });
@@ -155,6 +175,7 @@ const response = await client.submit({
     credentialId: request.credential_id,
     provider: request.provider,
     field: request.field,
+    ...(contract.signupOrigin ? { signupOrigin: contract.signupOrigin } : {}),
     consumer: request.consumer,
     purpose: request.purpose,
     accountEmail: request.account_email,
