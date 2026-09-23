@@ -12,3 +12,7 @@ assets/readme-banner.svg
 #   README.md — GitHub shows it on the repository page
 #   package.json — npm
 .
+# The published JSON Schema contract: package.json ships schemas/ as-is, consumers import each
+# file by its path, and task-status.v1 resolves its receipt $refs as sibling file names, so the
+# six versioned schemas stay together in one folder.
+schemas/
