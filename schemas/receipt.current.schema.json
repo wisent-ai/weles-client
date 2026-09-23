@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weles.wisent.com/schemas/receipt.current.json",
+  "title": "Weles signed receipt compatibility generation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "taskId", "organizationId", "origin", "action", "outcome", "evidenceDigest", "keyId", "signedPayload", "signature"],
+  "properties": {
+    "schema": { "const": "weles.receipt.current" },
+    "taskId": { "type": "string", "minLength": 1 },
+    "organizationId": { "type": "string", "minLength": 1 },
+    "origin": { "type": "string", "format": "uri" },
+    "action": { "type": "string", "minLength": 1 },
+    "outcome": { "type": "string", "enum": ["succeeded", "failed", "cancelled"] },
+    "evidenceDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "keyId": { "type": "string", "minLength": 1 },
+    "signedPayload": { "type": "string", "minLength": 2 },
+    "signature": { "type": "string", "minLength": 1 }
+  }
+}

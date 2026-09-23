@@ -18,6 +18,7 @@
   "files": [
     "bin",
     "src",
+    "schemas",
     "LICENSE",
     "README.md"
   ],
