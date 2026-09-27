@@ -35,7 +35,7 @@
     {
       "name": "github-mirror",
       "platform": "node-archive",
-      "argv": ["python3", "release/deliver-github-mirror.py"],
+      "argv": ["stado", "product", "deliver", "github-mirror", "--repository", "wisent-ai/weles-client", "--title", "Weles client"],
       "required": false,
       "secret_env": {
         "WISENT_MIRROR_TOKEN": "github-release-mirror#token"
