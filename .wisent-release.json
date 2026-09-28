@@ -19,6 +19,9 @@
       "build": {
         "argv": ["bash", "release/build.sh"]
       },
+      "tests": [
+        {"name": "credential-bridge", "argv": ["node", "--test"]}
+      ],
       "stage": {
         "dist/weles-client.tgz": "weles-client.tgz",
         "dist/weles-client.tgz.sha256": "weles-client.tgz.sha256",
