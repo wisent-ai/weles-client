@@ -5,6 +5,10 @@
 // this file exists to prevent, so the patterns and the two functions that
 // use them sit together.
 
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+
+import { WelesClientError } from '../error.mjs';
 
 const SENSITIVE_KEY = /password|secret|token|cookie|authorization|proxy.?auth/i;
 // A resume token is the single-use continuation handle Weles issues for its own
@@ -52,6 +56,36 @@ async function boundedResponseText(response) {
   return text + decoder.decode();
 }
 
+// One GET whose response Weles holds until the answer exists, read under the
+// same size limit. A blocking read is answered when the task ends, which can
+// be hours later; the global fetch abandons headers after five minutes, so
+// this read goes through node:http/node:https, which end the exchange only
+// when the server or the connection does.
+function heldGet(url, headers) {
+  const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
+    const outgoing = send(url, { method: 'GET', headers }, (incoming) => {
+      const chunks = [];
+      let received = 0;
+      incoming.on('data', (chunk) => {
+        received += chunk.length;
+        if (received > MAX_RESPONSE_BYTES) {
+          incoming.destroy();
+          reject(new WelesClientError('response-too-large', 'Weles response exceeded the size limit'));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      incoming.on('end', () => {
+        resolve({ status: incoming.statusCode, text: Buffer.concat(chunks).toString('utf8') });
+      });
+      incoming.on('error', reject);
+    });
+    outgoing.on('error', reject);
+    outgoing.end();
+  });
+}
+
 
 function redact(value) {
   if (value instanceof Error) {
@@ -93,5 +127,6 @@ export {
   SENSITIVE_KEY,
   UUID_PATTERN,
   boundedResponseText,
+  heldGet,
 };
 export { assertNoSensitiveFields, redact };

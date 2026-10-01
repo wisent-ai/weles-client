@@ -1,6 +1,6 @@
 {
   "name": "@wisent-ai/weles-client",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Safe client and signed receipt verifier for authorized Weles workflows",
   "type": "module",
   "exports": {

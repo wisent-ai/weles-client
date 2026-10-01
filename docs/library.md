@@ -170,6 +170,20 @@ Transport ambiguity is returned as `transport-failed`; the library does not
 retry. Reconcile with the service using an approved task-status channel before
 submitting a new operation.
 
+### Await a terminal status
+
+```js
+const finished = await client.awaitTerminal(taskId);
+```
+
+`awaitTerminal` asks Weles for `GET /api/v1/tasks/<taskId>?wait=terminal`.
+Weles holds that response until the task's durable record says `succeeded`,
+`failed` or `cancelled`, so the caller waits on the task itself rather than
+re-reading `get` on a timer. The read has no client-side deadline: it ends when
+Weles answers or the connection fails, and a failed connection is
+`transport-failed`. A receipt in the answer is bound to the requested task ID
+exactly as `get` binds it.
+
 ## Receipt verification
 
 ```js

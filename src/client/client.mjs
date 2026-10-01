@@ -12,6 +12,7 @@ import {
   RESUMPTION_KEY,
   assertNoSensitiveFields,
   boundedResponseText,
+  heldGet,
   redact,
 } from "./input/safety.mjs";
 import {
@@ -101,6 +102,42 @@ class WelesClient {
       this.#verifyReceipt(response.receipt, { taskId: id });
     }
     return response;
+  }
+
+  // The task's status once it is terminal. Weles holds the response until the
+  // task succeeds, fails or is cancelled, so a caller waits on the task itself
+  // instead of re-reading its status on a timer.
+  async awaitTerminal(taskId) {
+    const id = requireText(taskId, 'taskId');
+    const url = new URL(`tasks/${encodeURIComponent(id)}?wait=terminal`, this.endpoint);
+    let held;
+    try {
+      held = await heldGet(url, {
+        Authorization: `Bearer ${this.bearer}`,
+        'X-Wisent-Organization-ID': this.organizationId,
+        Accept: 'application/json',
+      });
+    } catch (error) {
+      if (error instanceof WelesClientError) throw error;
+      throw new WelesClientError('transport-failed', 'The Weles request did not complete', redact(error));
+    }
+    let payload;
+    try {
+      payload = held.text ? JSON.parse(held.text) : {};
+    } catch {
+      throw new WelesClientError('invalid-response', 'Weles returned a non-JSON response', { status: held.status });
+    }
+    if (held.status < 200 || held.status > 299) {
+      throw new WelesClientError('request-rejected', 'Weles rejected the request', {
+        status: held.status,
+        response: redact(payload),
+      });
+    }
+    requireObject(payload, 'response');
+    if (payload.receipt) {
+      this.#verifyReceipt(payload.receipt, { taskId: id });
+    }
+    return payload;
   }
 
   #verifyReceipt(receipt, expected = {}) {
