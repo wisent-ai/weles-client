@@ -43,7 +43,7 @@ const CONTRACTS = Object.freeze({
   'weles-microsoft-jakub-wisent-ai-password': Object.freeze({ provider: 'microsoft_entra', secret: 'weles-microsoft-jakub-wisent-ai-password', origin: ENTRA_ORIGIN, field: 'password', consumer: 'weles-microsoft-jakub-wisent-ai-password-writer', operations: ENTRA_OPERATIONS, accountUpn: 'jakub@wisent.ai', tenantId: ENTRA_TENANT_ID, principalObjectId: '4c888895-03cf-4ab1-a11e-46942c568217' }),
   'weles-microsoft-lukasz-wisent-com-password': Object.freeze({ provider: 'microsoft_entra', secret: 'weles-microsoft-lukasz-wisent-com-password', origin: ENTRA_ORIGIN, field: 'password', consumer: 'weles-microsoft-lukasz-wisent-com-password-writer', operations: ENTRA_OPERATIONS, accountUpn: 'lukasz@wisent.com', tenantId: ENTRA_TENANT_ID, principalObjectId: '1f636f97-b07f-4e9b-952a-5d069ccc5b20' }),
 });
-const MICROSOFT_CREDENTIAL_ID = /^weles-microsoft-[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?-password$/;
+export const MICROSOFT_CREDENTIAL_ID = /^weles-microsoft-[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?-password$/;
 
 export function contractFor(request) {
   const exact = CONTRACTS[request.credential_id];

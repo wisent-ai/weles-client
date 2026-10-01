@@ -42,9 +42,12 @@ git clone https://github.com/wisent-ai/weles-client
 npm install --global ./weles-client
 ```
 
-The installed package provides the JavaScript library and the
-`weles-skarbiec-acquire` executable. Until an immutable package release is
-published, pin the Git commit used by a deployment.
+The installed package provides the JavaScript library and two Skarbiec
+credential adapters, `weles-skarbiec-acquire` and
+`weles-skarbiec-acquire-admission`. Each reads one JSON credential request on
+standard input and answers one JSON line; `--help` prints how it is driven, and
+an argument or an invalid request exits 2 naming why. Until an immutable package
+release is published, pin the Git commit used by a deployment.
 
 ## Problem and intended users
 

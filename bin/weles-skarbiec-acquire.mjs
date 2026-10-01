@@ -2,9 +2,9 @@
 import { WelesClient } from '../src/index.mjs';
 import { resolveWelesEndpoint } from '../src/stado-admission.mjs';
 import {
-  ZERO, FIVE_TWELVE, TWO_HUNDRED, ONE_TWENTY_EIGHT, ACTION, contractFor,
+  ZERO, FIVE_TWELVE, TWO_HUNDRED, ONE_TWENTY_EIGHT, ACTION, MICROSOFT_CREDENTIAL_ID, contractFor,
 } from '../src/credential/contract.mjs';
-import { readRequest, validateRequest } from '../src/credential/input.mjs';
+import { admitRequest } from '../src/credential/input.mjs';
 import {
   diagnostics, sanitizedText, sanitizedCode, sanitizedPhase, sanitizedName, sanitizedHttpsUrl,
 } from '../src/credential/diagnostics.mjs';
@@ -38,8 +38,10 @@ function unsupported(request, status, message, code, phase) {
   };
 }
 
-const request = await readRequest();
-validateRequest(request);
+const request = await admitRequest(
+  'weles-skarbiec-acquire',
+  'Skarbiec credential adapter: carries one acquire, rotate, verify or adopt operation to Weles and answers its status.',
+);
 const contract = contractFor(request);
 // A Microsoft password lifecycle names its exact writer consumer for rotate and
 // verify and its exact reader consumer for adopt: Skarbiec stages the adopt

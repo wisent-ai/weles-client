@@ -40,6 +40,32 @@ export function sameDirectory(value, directory) {
     && DIRECTORY_KEYS.every((key) => value[key] === directory[key]);
 }
 
+/**
+ * The entry of a Skarbiec credential adapter: `--help` prints how it is driven
+ * and exits 0; any other argument, or a request that is not a valid credential
+ * request on standard input, is an invocation the adapter cannot read and
+ * exits 2 naming why (cli.md rules 9 and 10). Returns the validated request.
+ */
+export async function admitRequest(name, purpose) {
+  const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) {
+    process.stdout.write(`usage: ${name} < request.json\n\n${purpose}\nThe request is one JSON credential request on standard input; the answer is one JSON line on standard output.\n`);
+    process.exit(ZERO);
+  }
+  if (argv.length) {
+    process.stderr.write(`${name}: takes no arguments, got ${argv.join(' ')}; the request is read from standard input\n`);
+    process.exit(2);
+  }
+  try {
+    const request = await readRequest();
+    validateRequest(request);
+    return request;
+  } catch (error) {
+    process.stderr.write(`${name}: ${error.message}\n`);
+    process.exit(2);
+  }
+}
+
 export async function readRequest(stream = process.stdin) {
   const chunks = [];
   let received = ZERO;
