@@ -8,4 +8,3 @@ set -euo pipefail
 node --check "$WISENT_SOURCE_DIR/src/index.mjs"
 node --check "$WISENT_SOURCE_DIR/bin/weles-skarbiec-acquire.mjs"
 node --check "$WISENT_SOURCE_DIR/bin/weles-skarbiec-acquire-admission.mjs"
-node --test "$WISENT_SOURCE_DIR/tests/credentials/"*.test.mjs

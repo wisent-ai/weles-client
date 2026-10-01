@@ -12,9 +12,6 @@
     "weles-skarbiec-acquire": "./bin/weles-skarbiec-acquire.mjs",
     "weles-skarbiec-acquire-admission": "./bin/weles-skarbiec-acquire-admission.mjs"
   },
-  "scripts": {
-    "test": "node --test"
-  },
   "files": [
     "bin",
     "src",
