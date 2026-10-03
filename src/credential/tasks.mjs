@@ -13,9 +13,10 @@ export function credentialResult(value, request) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) {
     throw new Error('Weles response is missing the credential-operation result');
   }
-  const secretMatches = result.secret === undefined || result.secret === contractFor(request)?.secret;
+  const contract = contractFor(request);
+  const secretMatches = result.secret === undefined || result.secret === contract?.secret;
   const itemMatches = result.vaultItemId === request.credential_id
-    || (result.vaultItemId === undefined && result.secret === contractFor(request)?.secret);
+    || (result.vaultItemId === undefined && result.secret === contract?.secret);
   const entraIdentityMatches = request.provider !== 'microsoft_entra'
     || ((result.tenantId === undefined || result.tenantId === request.directory.tenant_id)
       && (result.principalObjectId === undefined

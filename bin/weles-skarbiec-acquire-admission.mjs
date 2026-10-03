@@ -2,7 +2,7 @@
 // Workload-scoped credential admission. Stado owns the endpoint; Skarbiec
 // owns the bearer and the pending operation. No provider credential crosses this wire.
 import { resolveWelesEndpoint, readCredentialAdmissionBearer } from '../src/stado-admission.mjs';
-import { admitRequest, readRequest } from '../src/credential/input.mjs';
+import { admitRequest, credentialDirectoryMatches, readRequest } from '../src/credential/input.mjs';
 import { credentialResponse, credentialFailure } from '../src/credential/response.mjs';
 
 async function emit(value) {
@@ -15,6 +15,11 @@ const request = await admitRequest(
   'weles-skarbiec-acquire-admission',
   'Skarbiec credential adapter: submits one workload-scoped credential operation to the Weles endpoint Stado resolves.',
 );
+if (!credentialDirectoryMatches(request)) {
+  await emit(credentialFailure(request, 'ENTRA_IDENTITY_CONTRACT_MISMATCH',
+    `Directory identity and password field must agree with provider ${request.provider} for ${request.credential_id}`));
+  process.exit(0);
+}
 let endpoint;
 try {
   const base = resolveWelesEndpoint();

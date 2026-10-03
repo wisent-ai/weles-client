@@ -44,33 +44,30 @@ A missing file, a symlink, a loosened mode, a foreign owner, extra lines, or a
 non-loopback plaintext URL is an explicit failure: the bridge emits
 `needs_configuration` with `code: WELES_ENDPOINT_UNRESOLVED` and
 `phase: admission`, and never falls back to an environment variable.
+Missing or invalid hosted `WELES_TOKEN` or `WISENT_ORGANIZATION_ID` returns
+`WELES_CALLER_IDENTITY_UNRESOLVED`, phase `admission`, with `providerEffect: none`
+before submission. This does not validate the caller's remote grants.
 
 ## Skarbiec credential lifecycle
 
-Skarbiec invokes an absolute, owner-controlled regular file rather than an npm
-shim. Point it at the executable inside the installed package:
+Skarbiec's packaged default is the self-hosted admission bridge. A hosted
+deployment may select the installed `weles-skarbiec-acquire.mjs` through
+`SKARBIEC_WELES_CREDENTIAL_COMMAND`. The selected executable must be an absolute,
+owner-controlled regular file, not an npm shim. Configure it on the vault owner,
+where Skarbiec invokes the bridge, rather than on a remote caller.
+
+These examples use invented item and caller identifiers. The canonical vault
+supplies the account and provider; the caller does not replace them:
 
 ```sh
-export SKARBIEC_WELES_CREDENTIAL_COMMAND="$(npm root --global)/@wisent-ai/weles-client/bin/weles-skarbiec-acquire.mjs"
+skarbiec credential verify example-directory \
+  --consumer example-directory-writer \
+  --as qualification-caller \
+  --token-file /absolute/owner-only-caller-token
 
-skarbiec credential adopt weles-microsoft-lukasz-wisent-com-password \
-  --provider microsoft_entra \
-  --consumer weles-microsoft-lukasz-wisent-com-password-writer \
-  --expect-upn lukasz@wisent.com \
-  --expect-tenant 23572277-0021-42ac-b2b9-10bd86c7d2af \
-  --expect-object-id 1f636f97-b07f-4e9b-952a-5d069ccc5b20 \
-  --purpose adopt-the-known-current-password
-
-skarbiec credential rotate weles-microsoft-lukasz-wisent-com-password \
-  --provider microsoft_entra \
-  --consumer weles-microsoft-lukasz-wisent-com-password-writer \
-  --purpose incident-remediation
-
-skarbiec credential resume weles-microsoft-lukasz-wisent-com-password \
-  --approval approval-01H9Z \
-  --resume-token r_9f3c2a
-
-skarbiec credential status weles-microsoft-lukasz-wisent-com-password
+skarbiec credential status example-directory \
+  --as qualification-caller \
+  --token-file /absolute/owner-only-caller-token
 ```
 
 The directory identity is not a call argument. It is sealed once into the item as
@@ -78,7 +75,7 @@ the `directory` block, and Skarbiec puts that block into the request; the
 `--expect-upn`, `--expect-tenant`, and `--expect-object-id` flags are only a
 cross-check that refuses before submit on `DIRECTORY_EXPECTATION_MISMATCH`.
 
-The bridge accepts only the fixed `skarbiec.credential-operation.v3` request;
+The hosted task bridge accepts only the fixed `skarbiec.credential-operation.v3` request;
 `skarbiec.credential-operation.v1` and `skarbiec.credential-operation.v2` are
 rejected with no alias. `mode: submit` binds its request ID to the Weles
 idempotency key and submits the allowlisted `skarbiec_credential_acquire`
@@ -98,6 +95,19 @@ a flat `account_upn`, `tenant_id`, or `principal_object_id` at the top level, is
 an invalid request. Providers other than `microsoft_entra` must send
 `directory: null`.
 
+Both executables reject a directory under another provider, a missing Entra
+directory, or an Entra field other than `password` before contacting Weles.
+The client checks the request's consistency, not an embedded account allowlist.
+Skarbiec supplies the sealed identity; the executor independently checks its
+deployment-owned account declaration and exact grants. A well-shaped request
+does not grant authority. Status responses and receipts remain bound to the
+exact directory supplied in that request.
+
+The self-hosted bridge uses the same versioned envelope but posts both submit
+and status to `/api/v1/credential-operations`, with its separate workload
+bearer. It refuses `resume`; the hosted approval continuation below does not
+apply to it.
+
 Before a real operation is queued, the Weles operator binds the organization to
 the customer's HTTPS Skarbiec endpoint and installs only the exact writer grant
 for each allowed item. The worker writes the credential directly to that tenant
@@ -106,10 +116,14 @@ the matching request ID and operation—not merely because an item exists.
 Microsoft bindings also require the tenant's
 `acquisition-scopes.conf` to contain the exact row
 `<item>-reader-password|<item>|password`; wildcards are rejected. The request's
-item, provider, field, and writer consumer must match the fixed bridge contract.
-The account metadata must bind the same `skarbiec_credential_id` and
-`skarbiec_tenant_id`. Missing writer, reader, account, or tenant bindings return
-`needs_configuration` before any provider action is queued.
+item, provider, field and writer must agree. The hosted bridge requires exactly
+`<item>-writer`; a reader identity cannot substitute for the writer. The
+executor reads exact item/provider declarations from the owner-only file named
+by `WELES_MANAGED_PASSWORD_CONTRACTS_FILE`; the client does not keep another copy
+of the deployment's identities. See the [canonical configuration guide](https://weles.wisent.com/docs/client).
+Account metadata must bind the same credential and authority namespace. An Entra
+directory tenant is not a Weles Skarbiec tenant. Missing writer, reader, account
+or authority bindings return `needs_configuration` before provider work.
 
 Current contracts:
 
@@ -119,29 +133,29 @@ Current contracts:
 | `weles-github-admin-org-token` | GitHub | `api_key` | acquire |
 | `weles-supabase-personal-access-token` | Supabase | `api_key` | acquire |
 | `weles-snapchat-snap-kit-api` | Snapchat | `api_key` | acquire |
-| `weles-microsoft-jakub-wisent-ai-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
-| `weles-microsoft-lukasz-wisent-com-password` | Microsoft Entra | `password` | adopt, rotate, reset, verify |
-| `weles-microsoft-<account-alias>-password` | Microsoft consumer account | `password` | rotate, verify |
+| Exact deployment-declared item | Microsoft Entra | `password` | adopt, rotate, reset, verify |
+| Exact deployment-declared item | Microsoft consumer account | `password` | rotate, verify through the hosted bridge |
 
 ### Microsoft Entra password lifecycle
 
-The two `microsoft_entra` items are pinned to one directory identity each. The
-request's `directory` block must match the bridge contract field by field,
-`directory.provider` must equal the request `provider`, and `field` must be
-`password`:
+Managed password identifiers are opaque and case-sensitive. The client accepts
+1–128 ASCII letters, digits, dots, underscores or hyphens, beginning with a
+letter or digit; no account-name prefix selects a provider. The executor's
+declaration remains authoritative about which provider owns the password.
 
-| Item | UPN | Tenant | Principal object ID |
-| --- | --- | --- | --- |
-| `weles-microsoft-jakub-wisent-ai-password` | `jakub@wisent.ai` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `4c888895-03cf-4ab1-a11e-46942c568217` |
-| `weles-microsoft-lukasz-wisent-com-password` | `lukasz@wisent.com` | `23572277-0021-42ac-b2b9-10bd86c7d2af` | `1f636f97-b07f-4e9b-952a-5d069ccc5b20` |
+The request's `directory` block carries the identity sealed by Skarbiec.
+`directory.provider` must equal `microsoft_entra`, and the requested field must
+be `password`. Inconsistent provider, field or directory presence returns
+`needs_configuration` with `code: ENTRA_IDENTITY_CONTRACT_MISMATCH` before
+endpoint or bearer resolution. Actual task and receipt identities are checked
+against that exact request, not against people or tenants compiled into the
+client.
 
-Any other combination returns `needs_configuration` with
-`code: ENTRA_IDENTITY_CONTRACT_MISMATCH` before Weles is contacted, and so does
-a missing `directory` block for `microsoft_entra` or any `directory` block sent
-under another provider. Entra sign-in uses
-`https://login.microsoftonline.com`; the consumer `https://account.live.com`
-origin applies only to provider `microsoft`, which still keeps its
-`weles-microsoft-<account-alias>-password` pattern and `--account <email>`.
+Entra sign-in uses `https://login.microsoftonline.com`. Consumer Microsoft
+passwords use `https://account.live.com` and require an account email in the
+Skarbiec request. A consumer account that is a directory guest remains a
+consumer account; neither its name nor a caller's provider choice changes the
+executor declaration.
 
 The four Entra operations are separate and non-substitutable:
 
@@ -239,3 +253,33 @@ status read therefore still carries the `code` and `phase` the worker recorded.
 Anything outside these shapes is dropped rather than forwarded, so provider
 HTML, stack traces, and credential material never reach stdout.
 
+## Real bridge qualification
+
+Run `node tests/credentials/journey.mjs --fixture /absolute/checkout/.build/credentials.json`
+on the vault owner, with a clean committed checkout and the normal Stado forward.
+The owner-only JSON fixture contains `dedicated: true`, `vault_served_to_worker: true`,
+`vault_file`, `skarbiec_binary`, `execution_host`, `worker_revision`,
+`organization_id`, `hosted_bearer_file`, `admission_bearer_file`,
+`diagnostics_bearer_file`, and `accounts`. Paths are absolute; the vault and
+bearer files are owned, regular and owner-only. Bearers have separate authorities.
+The fixture must name the real isolated vault served to the dedicated worker,
+not a copied vault. Supply exactly two distinct managed items, one per provider.
+Each account contains `item`, `provider`, and either consumer `email` or Entra
+`directory: {tenant_id, principal_object_id, account_upn}`.
+
+The journey selects each candidate bridge through Skarbiec's normal
+`SKARBIEC_WELES_CREDENTIAL_COMMAND` setting in its child process. Real local
+`credential verify` creates the journal before the worker can commit. Both
+providers must complete through both bridges. Wrong directory, field, writer and
+status request identities must be refused without replacing the stored operation.
+Provider capture, public origin, item, request, execution host and persisted
+verification must agree; Entra receipts must also match the sealed identity.
+No password, grant, account mapping or host configuration is changed.
+
+Private reports under `.build/credentials` retain exact client and worker revisions,
+binary hashes, commands, exits, native responses and supported worker recordings.
+An unfinished operation exits 1 with `awaiting_observation`. Continue with the
+same fixture and `--admission-report /absolute/path/to/report.json`; this reads
+that operation rather than submitting it again. A refused dependency or missing
+provider evidence cannot pass. A failed report must be investigated before a
+new run; the journey refuses to replace any unfinished operation.

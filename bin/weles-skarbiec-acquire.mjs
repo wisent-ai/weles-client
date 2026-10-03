@@ -2,9 +2,9 @@
 import { WelesClient } from '../src/index.mjs';
 import { resolveWelesEndpoint } from '../src/stado-admission.mjs';
 import {
-  ZERO, FIVE_TWELVE, TWO_HUNDRED, ONE_TWENTY_EIGHT, ACTION, MICROSOFT_CREDENTIAL_ID, contractFor,
+  ZERO, FIVE_TWELVE, TWO_HUNDRED, ONE_TWENTY_EIGHT, ACTION, contractFor,
 } from '../src/credential/contract.mjs';
-import { admitRequest } from '../src/credential/input.mjs';
+import { admitRequest, credentialDirectoryMatches } from '../src/credential/input.mjs';
 import {
   diagnostics, sanitizedText, sanitizedCode, sanitizedPhase, sanitizedName, sanitizedHttpsUrl,
 } from '../src/credential/diagnostics.mjs';
@@ -35,6 +35,7 @@ function unsupported(request, status, message, code, phase) {
     message,
     code: sanitizedCode(code),
     phase: sanitizedPhase(phase),
+    providerEffect: 'none',
   };
 }
 
@@ -42,21 +43,27 @@ const request = await admitRequest(
   'weles-skarbiec-acquire',
   'Skarbiec credential adapter: carries one acquire, rotate, verify or adopt operation to Weles and answers its status.',
 );
+if (!credentialDirectoryMatches(request)) {
+  await emit(unsupported(
+    request,
+    'needs_configuration',
+    `Directory identity and password field must agree with provider ${request.provider} for ${request.credential_id}`,
+    'ENTRA_IDENTITY_CONTRACT_MISMATCH',
+    'admission',
+  ));
+  process.exit(ZERO);
+}
 const contract = contractFor(request);
-// A Microsoft password lifecycle names its exact writer consumer for rotate and
-// verify and its exact reader consumer for adopt: Skarbiec stages the adopt
-// candidate against the reader consumer, so only that consumer may read it back.
-const microsoftConsumer = request.provider === 'microsoft'
-    && MICROSOFT_CREDENTIAL_ID.test(request.credential_id)
-    && [`${request.credential_id}-writer`, `${request.credential_id}-reader-password`].includes(request.consumer);
 if (!contract
     || contract.provider !== request.provider
     || contract.field !== request.field
-    || (contract.consumer !== request.consumer && !microsoftConsumer)) {
+    || contract.consumer !== request.consumer) {
   await emit(unsupported(
     request,
     'needs_configuration',
     `No exact Weles credential contract for ${request.credential_id}/${request.provider}/${request.consumer}`,
+    'WELES_CREDENTIAL_CONTRACT_MISMATCH',
+    'admission',
   ));
   process.exit(ZERO);
 }
@@ -91,31 +98,6 @@ if (request.signup_origin && contract.signupOrigin === undefined) {
   ));
   process.exit(ZERO);
 }
-if (request.provider === 'microsoft_entra'
-    && (request.directory === null
-      || request.directory.provider !== request.provider
-      || request.directory.account_upn !== contract.accountUpn
-      || request.directory.tenant_id !== contract.tenantId
-      || request.directory.principal_object_id !== contract.principalObjectId)) {
-  await emit(unsupported(
-    request,
-    'needs_configuration',
-    `Entra account identity does not match the exact bridge contract for ${request.credential_id}`,
-    'ENTRA_IDENTITY_CONTRACT_MISMATCH',
-    'admission',
-  ));
-  process.exit(ZERO);
-}
-if (request.provider !== 'microsoft_entra' && request.directory !== null) {
-  await emit(unsupported(
-    request,
-    'needs_configuration',
-    `A directory identity is only accepted for provider microsoft_entra, not ${request.provider}`,
-    'ENTRA_IDENTITY_CONTRACT_MISMATCH',
-    'admission',
-  ));
-  process.exit(ZERO);
-}
 if (request.provider === 'microsoft' && !request.account_email) {
   await emit(unsupported(
     request,
@@ -140,14 +122,25 @@ try {
   process.exit(ZERO);
 }
 
-const identity = callerIdentity(endpoint);
-const client = new WelesClient({
-  endpoint,
-  bearer: identity.bearer,
-  organizationId: identity.organizationId,
-  allowedOrigins: [contract.origin],
-  allowedActions: [ACTION],
-});
+let client;
+try {
+  client = new WelesClient({
+    endpoint,
+    bearer: requiredEnvironment('WELES_TOKEN'),
+    organizationId: requiredEnvironment('WISENT_ORGANIZATION_ID'),
+    allowedOrigins: [contract.origin],
+    allowedActions: [ACTION],
+  });
+} catch (error) {
+  await emit(unsupported(
+    request,
+    'needs_configuration',
+    sanitizedText(`Hosted Weles caller identity is unresolved: ${error.message}`, FIVE_TWELVE),
+    'WELES_CALLER_IDENTITY_UNRESOLVED',
+    'admission',
+  ));
+  process.exit(ZERO);
+}
 if (request.mode === 'status') {
   const task = taskRecord(await client.get(request.action_log_id), request);
   const transition = semanticScholarTransition(task, request) ?? approvedTransition(task, request);

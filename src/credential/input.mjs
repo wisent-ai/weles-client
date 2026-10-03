@@ -40,6 +40,13 @@ export function sameDirectory(value, directory) {
     && DIRECTORY_KEYS.every((key) => value[key] === directory[key]);
 }
 
+/** Consistency of an already validated wire request, not account authorization. */
+export function credentialDirectoryMatches(request) {
+  return request.provider === 'microsoft_entra'
+    ? request.field === 'password' && request.directory !== null && request.directory.provider === request.provider
+    : request.directory === null;
+}
+
 /**
  * The entry of a Skarbiec credential adapter: `--help` prints how it is driven
  * and exits 0; any other argument, or a request that is not a valid credential
