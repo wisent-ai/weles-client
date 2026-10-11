@@ -20,8 +20,9 @@ function ownedFile(path, unsafeBits) {
   let stats;
   try {
     stats = lstatSync(path);
-  } catch {
-    throw new Error(`${path} does not exist`);
+  } catch (error) {
+    if (error.code === 'ENOENT') throw new Error(`${path} does not exist`);
+    throw new Error(`${path} cannot be inspected: ${error.message}`);
   }
   if (!stats.isFile() || stats.isSymbolicLink()) throw new Error(`${path} is not a regular file`);
   if (stats.uid !== process.getuid()) throw new Error(`${path} is not owned by this user`);
