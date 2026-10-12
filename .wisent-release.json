@@ -13,7 +13,8 @@
       "quality": [
         {
           "name": "node-syntax",
-          "argv": ["bash", "release/quality.sh"]
+          "argv": ["bash", "release/quality.sh"],
+          "kind": "lint"
         }
       ],
       "build": {
