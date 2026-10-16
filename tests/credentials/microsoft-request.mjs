@@ -2,16 +2,19 @@
 // credential adapters, bin/weles-skarbiec-acquire.mjs and
 // bin/weles-skarbiec-acquire-admission.mjs, with a Stado forwards directory of
 // this run's own that holds no Weles admission forward. Each adapter must
-// admit the request, read its contract and answer one JSON status on stdout
-// with exit 0: needs_configuration at the admission phase, naming the missing
-// forward, with no provider effect. A crash, a usage refusal or any other
-// status fails the run. Nothing reaches a provider or Weles.
+// answer --help with exit 0, refuse an argument it does not take naming it,
+// and admit each request, read its contract and answer one JSON status on
+// stdout with exit 0: needs_configuration at the admission phase, naming the
+// missing forward, with no provider effect. A crash, a usage refusal of a
+// valid request or any other status fails the run. Nothing reaches a provider
+// or Weles.
 //
 // The run's report is .build/credentials/<run>/report.json. A defect register
 // that measures a repair by this journey names the defect and its criterion in
 // WELES_CLIENT_TEST_DEFECT and WELES_CLIENT_TEST_CRITERION; a passing run then
 // also writes criterion.json beside the report.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { constants } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -92,6 +95,14 @@ await mkdir(forwards, { recursive: true });
 const env = { PATH: process.env.PATH, HOME: process.env.HOME, STADO_FORWARDS_DIR: forwards };
 try {
   for (const adapter of adapters) {
+    const help = await evidence.command(process.execPath, [join(root, 'bin', adapter), '--help'], { env });
+    assert.match(help.stdout, /credential/i, help.stdout);
+    report.cases.push({ adapter, help: help.stdout.trim() });
+    // A misuse is refused, so it is observed state rather than a command that must succeed.
+    const misuse = spawnSync(process.execPath, [join(root, 'bin', adapter), '--no-such-flag'], { env, encoding: 'utf8' });
+    assert.ok(misuse.status, `${adapter} accepted --no-such-flag: ${misuse.stdout}`);
+    assert.match(misuse.stderr, /--no-such-flag/);
+    report.cases.push({ adapter, misuse: { args: ['--no-such-flag'], exit: misuse.status, refusal: misuse.stderr.trim() } });
     for (const account of accounts) {
       const { stdout } = await evidence.command(process.execPath, [join(root, 'bin', adapter)], {
         env,
