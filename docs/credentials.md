@@ -190,8 +190,10 @@ passkey challenges stop as `needs_human_approval`; no local write is made.
 All three modes emit a sanitized JSON object on stdout: `status`, `operation`,
 `provider`, `vaultItemId`, and the optional `actionLogId`,
 `sourceActionLogId`, `url`, `buildId`, `flowName`, and `message` (at most 512
-characters, no control characters). Typed diagnostics are echoed only when the
-service reports them in a valid form:
+characters, no control characters). When the endpoint or the caller identity
+cannot be resolved and the cause does not fit `message`, the whole cause is
+written to standard error and `message` says so. Typed diagnostics are echoed
+only when the service reports them in a valid form:
 
 | Field | Accepted values |
 | --- | --- |

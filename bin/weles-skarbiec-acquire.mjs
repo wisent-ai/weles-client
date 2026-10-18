@@ -14,9 +14,24 @@ import {
 } from '../src/credential/tasks.mjs';
 
 function requiredEnvironment(name) {
-  const value = process.env[name]?.trim() ?? '';
+  const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+/**
+ * `what` and its cause as the output's message. The message field is bounded
+ * by the output contract (docs/credentials.md); a cause it cannot carry is
+ * written whole to standard error and the field says where it went.
+ */
+function causeMessage(what, error) {
+  const cause = `${what}: ${error.message}`;
+  let message = sanitizedText(cause, FIVE_TWELVE);
+  if (message === undefined) {
+    process.stderr.write(`${cause}\n`);
+    message = `${what}; its cause does not fit the message field and is on standard error`;
+  }
+  return message;
 }
 
 async function emit(value) {
@@ -114,8 +129,7 @@ try {
   await emit(unsupported(
     request,
     'needs_configuration',
-    sanitizedText(`Weles admission endpoint is unresolved: ${error.message}`, FIVE_TWELVE)
-      ?? 'Weles admission endpoint is unresolved',
+    causeMessage('Weles admission endpoint is unresolved', error),
     'WELES_ENDPOINT_UNRESOLVED',
     'admission',
   ));
@@ -135,7 +149,7 @@ try {
   await emit(unsupported(
     request,
     'needs_configuration',
-    sanitizedText(`Hosted Weles caller identity is unresolved: ${error.message}`, FIVE_TWELVE),
+    causeMessage('Hosted Weles caller identity is unresolved', error),
     'WELES_CALLER_IDENTITY_UNRESOLVED',
     'admission',
   ));
