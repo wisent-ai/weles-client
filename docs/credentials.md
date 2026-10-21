@@ -228,6 +228,12 @@ field is valid, never partially:
 `credential resume <item> --approval <id> --resume-token <token>` is the only way
 to continue such an operation; a repeated submit is not.
 
+The self-hosted Weles admission accepts `submit` and `status` and refuses
+`resume`, so the approval it issues states `expires_at` as the moment it was
+issued: nothing can continue that run. `credential resume` then answers
+`APPROVAL_EXPIRED`, releases the staged candidate, and the operation is
+submitted again once the person has done what `instruction` asks.
+
 A terminally successful operation carries a receipt, forwarded under the same
 all-or-nothing rule, so `credential status` can answer whether exactly this
 principal was rotated without reading mail or worker logs:
