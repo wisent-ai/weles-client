@@ -25,7 +25,10 @@ function verifyReceipt(receipt, keys) {
   const keyId = requireText(receipt.keyId, 'receipt.keyId');
   const signature = requireText(receipt.signature, 'receipt.signature');
   const signedPayload = requireText(receipt.signedPayload, 'receipt.signedPayload');
-  const keyMap = keys instanceof Map ? keys : new Map(Object.entries(keys ?? {}));
+  if (keys === undefined || keys === null) {
+    throw new WelesClientError('missing-receipt-keys', 'No trusted public keys were given to verify the receipt against', { keyId });
+  }
+  const keyMap = keys instanceof Map ? keys : new Map(Object.entries(keys));
   const publicKey = keyMap.get(keyId);
   if (!publicKey) {
     throw new WelesClientError('unknown-receipt-key', 'No trusted public key matches the receipt key identifier', { keyId });
@@ -37,8 +40,8 @@ function verifyReceipt(receipt, keys) {
   let claims;
   try {
     claims = JSON.parse(signedPayload);
-  } catch {
-    throw new WelesClientError('invalid-receipt-payload', 'The signed receipt payload is not JSON');
+  } catch (error) {
+    throw new WelesClientError('invalid-receipt-payload', 'The signed receipt payload is not JSON', { cause: error.message });
   }
   requireObject(claims, 'receipt claims');
   for (const field of ['taskId', 'organizationId', 'origin', 'action', 'outcome', 'evidenceDigest']) {

@@ -207,6 +207,10 @@ with signed claims. It does not know a request context. `WelesClient` adds the
 organization, origin/action, and task-ID bindings described above before
 returning a response.
 
+A call without a key map is refused as `missing-receipt-keys` before any key is
+looked up; a signed payload that is not JSON is `invalid-receipt-payload` with
+the parser's message under `details.cause`.
+
 Store the signed payload, signature, key ID, verified claims, and key-set version
 together. Obtain keys through a separately authenticated channel; never accept a
 verification key from the receipt it is supposed to verify.
