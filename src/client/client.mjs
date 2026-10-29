@@ -8,10 +8,8 @@ import { randomUUID } from "node:crypto";
 import { WelesClientError } from "./error.mjs";
 import {
   CONTROLLED_HEADERS,
-  MAX_RESPONSE_BYTES,
   RESUMPTION_KEY,
   assertNoSensitiveFields,
-  boundedResponseText,
   heldGet,
   redact,
 } from "./input/safety.mjs";
@@ -118,7 +116,6 @@ class WelesClient {
         Accept: 'application/json',
       });
     } catch (error) {
-      if (error instanceof WelesClientError) throw error;
       throw new WelesClientError('transport-failed', 'The Weles request did not complete', redact(error));
     }
     let payload;
@@ -200,9 +197,8 @@ class WelesClient {
     }
     let text;
     try {
-      text = await boundedResponseText(response);
+      text = await response.text();
     } catch (error) {
-      if (error instanceof WelesClientError) throw error;
       throw new WelesClientError('transport-failed', 'The Weles response body did not complete', redact(error));
     }
     let payload;
